@@ -40,8 +40,13 @@ let debug_print_original_model = Debug.register_info_flag "print-original-model"
 
 let debug_print_derived_model = Debug.register_info_flag "print-derived-model"
     ~desc:"Print derived counterexample model when --check-ce"
+    
+let debug_print_after_prove_task = Debug.register_info_flag "print-after-prove-task"
+    ~desc:"Print after Driver.prove_task complete"
 
+(* Add a new file into the queue to be processed later *)
 let add_opt_file x =
+  (* theory list *)
   let tlist = Queue.create () in
   Queue.push (Some x, tlist) opt_queue;
   opt_input := Some tlist
@@ -199,6 +204,8 @@ let option_list =
     " print output with colors";
   ]
 
+(* Initialize the configuration and options *)
+(* `complete_initialization` is called here *)
 let config, env =
   Whyconf.Args.initialize option_list add_opt_file usage_msg
 
@@ -206,7 +213,9 @@ let opt_driver = ref (match !opt_driver with
   | f::ef -> Some (None,f,["",ef])
   | [] -> None)
 
+(* Read the files and load the tasks into the queue *)
 let () = try
+  (* If there is no task to be executed *)
   if Queue.is_empty opt_queue then
     Whyconf.Args.exit_with_usage usage_msg;
 
@@ -244,6 +253,7 @@ let () = try
   if !opt_timelimit = None then opt_timelimit := Some (Whyconf.timelimit main);
   if !opt_memlimit  = None then opt_memlimit  := Some (Whyconf.memlimit main);
   begin match !opt_prover with
+  (* If a prover is provided, load the correct driver for this prover *)
   | Some s ->
     let filter_prover = Whyconf.parse_filter_prover s in
     let prover = Whyconf.filter_one_prover config filter_prover in
@@ -254,6 +264,7 @@ let () = try
   | None ->
       ()
   end;
+  (* Add meta information for the tasks *)
   let add_meta task (meta,s) =
     let meta = lookup_meta meta in
     let args = match meta.meta_type, s with
@@ -285,12 +296,18 @@ let memlimit = match !opt_memlimit with
 let print_th_namespace fmt th =
   Pretty.print_namespace th.th_name.Ident.id_string fmt th
 
+(* Check whether we should really do this task? *)
 let really_do_task (task: task) =
+  (* the term *)
   let t = task_goal_fmla task in
+  (* aux : string * int option * string option -> bool *)
+  (* the entire tuple (f,l,e) represents a subgoal *)
   let aux (f,l,e) =
     match t.Term.t_loc with
     | None -> false
     | Some loc ->
+        (* goal_f: file name *)
+        (* goal_l: line number of the beginning of the goal *)
         let goal_f, goal_l, _, _, _ = Loc.get loc in
         goal_f = f &&
         (match l with None -> true | Some l -> l = goal_l) &&
@@ -301,6 +318,7 @@ let really_do_task (task: task) =
 
 let fname_printer = ref (Ident.create_ident_printer [])
 
+(* Print the prepared task to the output stream *)
 let output_task drv fname _tname th task dir =
   let fname = Filename.basename fname in
   let fname =
@@ -363,6 +381,8 @@ let print_result ?json fmt (fname, loc, goal_name, expls, res, ce) =
 
 let unproved = ref false
 
+(* models: list of prover answers and model parsers *)
+(* Returns the parser again, a decision and a execution log *)
 let select_ce env th models =
   if models <> [] then
     match Pmodule.restore_module th with
@@ -395,6 +415,7 @@ let print_other_models (m, (c, log)) =
             (Check_ce.model_of_exec_log ~original_model:m log)
     | _ -> () )
 
+(* tname: should be task name *)
 let do_task config env drv fname tname (th : Theory.theory) (task : Task.task) =
   if really_do_task task then
   let open Call_provers in
@@ -407,8 +428,11 @@ let do_task config env drv fname tname (th : Theory.theory) (task : Task.task) =
         let call =
           Driver.prove_task ~command ~config ~limit drv task
         in
+        if Debug.test_flag debug_print_after_prove_task then
+          printf "DRIVER.PROVE_TASK@ RETURNED@.";
         let res = wait_on_call call in
         let ce = select_ce env th res.pr_models in
+        (* Stringify the formula of the task, and display it *)
         let t = task_goal_fmla task in
         let expls = Termcode.get_expls_fmla t in
         let goal_name = (task_goal task).Decl.pr_name.Ident.id_string in
@@ -422,6 +446,10 @@ let do_task config env drv fname tname (th : Theory.theory) (task : Task.task) =
 
 let do_tasks config env drv fname tname th task =
   let table = Args_wrapper.build_naming_tables task in
+  (* Apply transformations on the tasks *)
+  (* The transformations are given in a list *)
+  (* After applying transformations, a task can be splitted into multiple subtasks *)
+  (* That's why we return a list *)
   let rec apply tasks = function
     | [] -> tasks
     | (name, args) :: trans ->
@@ -433,8 +461,11 @@ let do_tasks config env drv fname tname th task =
             Trans.apply_transform_args name env args table ffmt in
         apply (List.concat (List.map apply_trans tasks)) trans in
   let tasks = apply [task] !opt_trans in
+  (* For each task, do it *)
   List.iter (do_task config env drv fname tname th) tasks
 
+(* glist: goal list, a list of (goal name, string) *)
+(* elist: Evaluation list, to be done *)
 let do_theory config env drv fname tname th glist elist =
   if !opt_print_theory then
     printf "%a@." Pretty.print_theory th
@@ -442,6 +473,7 @@ let do_theory config env drv fname tname th glist elist =
     printf "%a@." print_th_namespace th
   else begin
     let add acc (x,l) =
+      (* pr: prsymbol *)
       let pr = try ns_find_pr th.th_export l with Not_found ->
         eprintf "Goal '%s' not found in theory '%s'.@." x tname;
         exit 1
@@ -451,6 +483,7 @@ let do_theory config env drv fname tname th glist elist =
     let drv = Option.get drv in
     let prs = Queue.fold add Decl.Spr.empty glist in
     let sel = if Decl.Spr.is_empty prs then None else Some prs in
+    (* list of tasks inside a theory *)
     let tasks = Task.split_theory th sel !opt_task in
     List.iter (do_tasks config env drv fname tname th) tasks;
     let eval (x,l) =
@@ -496,6 +529,7 @@ let do_input config env drv = function
   | Some f, tlist ->
       let format = !opt_parser in
       let fname, m = match f with
+        (* The parser is called here *)
         | "-" -> "stdin",
             Env.read_channel Env.base_language ?format env "stdin" stdin
         | fname ->
@@ -522,8 +556,10 @@ let () =
       Format.set_formatter_stag_functions Util.ansi_color_tags;
       set_mark_tags true );
     let main = Whyconf.get_main config in
+    (* Load a driver *)
     let load (d,f,ef) = Driver.load_driver_file_and_extras main env ~extra_dir:d f ef in
     let drv = Option.map load !opt_driver in
+    (* Print here *)
     Queue.iter (do_input main env drv) opt_queue;
     if !unproved then exit 2
   with e when not (Debug.test_flag Debug.stack_trace) ->
