@@ -286,7 +286,8 @@ rule token = parse
 
   let whyml_format = "whyml"
 
-  let () = Env.register_format mlw_language whyml_format ["mlw";"why"]
+  let () =
+    Format.eprintf "lexer.ml: Registering whyml format@.";
+    Env.register_format mlw_language whyml_format ["mlw";"why"]
       read_channel ~desc:"WhyML@ programming@ and@ specification@ language"
-
 }

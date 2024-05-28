@@ -2,5 +2,10 @@
     "ocaml.sandbox": {
         "kind": "opam",
         "switch": "default"
+    },
+    "files.trimTrailingWhitespace": true,
+    "[ocaml]": {
+        "editor.tabSize": 2,
+        "editor.indentSize": "tabSize"
     }
 }

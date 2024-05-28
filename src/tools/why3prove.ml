@@ -40,9 +40,9 @@ let debug_print_original_model = Debug.register_info_flag "print-original-model"
 
 let debug_print_derived_model = Debug.register_info_flag "print-derived-model"
     ~desc:"Print derived counterexample model when --check-ce"
-    
-let debug_print_after_prove_task = Debug.register_info_flag "print-after-prove-task"
-    ~desc:"Print after Driver.prove_task complete"
+
+let debug_trace_why3prove = Debug.register_info_flag "trace-why3prove"
+    ~desc:"Trace the execution of code in src/tools/why3prove.ml"
 
 (* Add a new file into the queue to be processed later *)
 let add_opt_file x =
@@ -207,6 +207,7 @@ let option_list =
 (* Initialize the configuration and options *)
 (* `complete_initialization` is called here *)
 let config, env =
+  eprintf "why3prove.ml: initialize args@.";
   Whyconf.Args.initialize option_list add_opt_file usage_msg
 
 let opt_driver = ref (match !opt_driver with
@@ -216,6 +217,7 @@ let opt_driver = ref (match !opt_driver with
 (* Read the files and load the tasks into the queue *)
 let () = try
   (* If there is no task to be executed *)
+  eprintf "why3prove.ml: read options@.";
   if Queue.is_empty opt_queue then
     Whyconf.Args.exit_with_usage usage_msg;
 
@@ -428,8 +430,6 @@ let do_task config env drv fname tname (th : Theory.theory) (task : Task.task) =
         let call =
           Driver.prove_task ~command ~config ~limit drv task
         in
-        if Debug.test_flag debug_print_after_prove_task then
-          printf "DRIVER.PROVE_TASK@ RETURNED@.";
         let res = wait_on_call call in
         let ce = select_ce env th res.pr_models in
         (* Stringify the formula of the task, and display it *)
@@ -523,10 +523,13 @@ let do_local_theory config env drv fname m (tname,_,t,glist,elist) =
 let do_input config env drv = function
   | None, _ when Debug.test_flag Typing.debug_type_only ||
                  Debug.test_flag Typing.debug_parse_only ->
+      Debug.dprintf debug_trace_why3prove "do_input: None, _@.";
       ()
   | None, tlist ->
+      Debug.dprintf debug_trace_why3prove "do_input: None, tlist@.";
       Queue.iter (do_global_theory config env drv) tlist
   | Some f, tlist ->
+      Debug.dprintf debug_trace_why3prove "do_input: Some f, tlist@.";
       let format = !opt_parser in
       let fname, m = match f with
         (* The parser is called here *)
@@ -551,6 +554,7 @@ let do_input config env drv = function
           Queue.iter (do_local_theory config env drv fname m) tlist
 
 let () =
+  eprintf "why3prove.ml: handle input file@.";
   try
     if (Util.terminal_has_color && !opt_color) then (
       Format.set_formatter_stag_functions Util.ansi_color_tags;
@@ -560,7 +564,9 @@ let () =
     let load (d,f,ef) = Driver.load_driver_file_and_extras main env ~extra_dir:d f ef in
     let drv = Option.map load !opt_driver in
     (* Print here *)
+    Debug.dprintf debug_trace_why3prove "(): driver loaded@.";
     Queue.iter (do_input main env drv) opt_queue;
+    Debug.dprintf debug_trace_why3prove "(): do_input finished@.";
     if !unproved then exit 2
   with e when not (Debug.test_flag Debug.stack_trace) ->
     eprintf "%a@." Exn_printer.exn_printer e;
