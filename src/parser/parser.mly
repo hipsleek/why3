@@ -26,7 +26,7 @@
 %start <Ptree.ident list> ident_comma_list_eof
 
 
-%%
+%% (* end of declaration section *)
 
 (* parsing of a single term or a single decl *)
 

@@ -135,8 +135,7 @@ let register_format ~desc lang ff extl fp =
   register_format lang (ff,extl,desc) fp;
   (* also register the file format in the extension table *)
   let add_ext m e = Mstr.add e ff m in
-  extension_table := List.fold_left add_ext !extension_table extl;
-  Debug.dprintf debug_trace_env "register_format: extension_table=%s@." (String.concat ", " (Mstr.keys !extension_table))
+  extension_table := List.fold_left add_ext !extension_table extl
 
 (* SHADOWING *)
 let add_builtin lang bp =

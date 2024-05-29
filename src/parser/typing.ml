@@ -1215,10 +1215,12 @@ let type_expr_in_muc muc ?(denv=Dexpr.denv_empty) expr =
 open Pdecl
 open Pmodule
 
+(* VC is generated using this function *)
 let add_pdecl ~vc muc d =
   if Debug.test_flag Glob.flag then Sid.iter (Glob.def ~kind:"") d.pd_news;
   add_pdecl ~vc muc d
 
+(* SHADOWED *)
 let add_decl muc d = add_pdecl ~vc:false muc (create_pure_decl d)
 
 let type_pure muc lvm denv e =
@@ -1660,6 +1662,9 @@ let type_inst ({muc_theory = tuc} as muc) ({mod_theory = t} as m) s =
   in
   List.fold_left add_inst (empty_mod_inst m) s
 
+(* SHADOWING, SHADOWED *)
+(* Add new declaration into muc *)
+(* Generate VC on let declaration, rec declaration and exception (exn) declaration *)
 let rec add_decl muc env file d =
   let vc = muc.muc_theory.uc_path = [] &&
     Debug.test_noflag debug_type_only in
@@ -1767,7 +1772,7 @@ type slice = {
   path             : Env.pathname;
   mutable file     : pmodule Mstr.t;
   mutable muc      : pmodule_uc option;
-  mutable muc_intf : pmodule option
+  mutable muc_intf : pmodule option (* module-under-construction's identifier *)
 }
 
 let state = (Stack.create () : slice Stack.t)
@@ -1795,9 +1800,11 @@ let open_module ?intf ({id_str = nm; id_loc = loc} as id) =
   let slice = Stack.top state in
   if Mstr.mem nm slice.file then Loc.errorm ~loc
     "module %s is already defined in this file" nm;
+  (* id : preid *)
   let id = if intf = None
            then create_user_id id
            else id_user (nm ^ "'impl") loc in
+  (* muc : pmodule_uc - module under construction *)
   let muc = create_module slice.env ~path:slice.path id in
   slice.muc <- Some muc;
   slice.muc_intf <- None;
@@ -1917,6 +1924,7 @@ let top_muc_on_demand loc slice = match slice.muc with
       slice.muc <- Some muc;
       muc
 
+(* SHADOWING *)
 let open_scope loc nm =
   assert (not (Stack.is_empty state));
   let slice = Stack.top state in
@@ -1924,6 +1932,7 @@ let open_scope loc nm =
   if Debug.test_noflag debug_parse_only then
     slice.muc <- Some (open_scope muc nm.id_str)
 
+(* SHADOWING *)
 let close_scope loc ~import =
   assert (not (Stack.is_empty state) && (Stack.top state).muc <> None);
   if Debug.test_noflag debug_parse_only then
@@ -1931,11 +1940,14 @@ let close_scope loc ~import =
     let muc = Loc.try1 ~loc (close_scope ~import) (Option.get slice.muc) in
     slice.muc <- Some muc
 
+(* SHADOWING *)
 let add_decl loc d =
   assert (not (Stack.is_empty state));
   let slice = Stack.top state in
   let muc = top_muc_on_demand loc slice in
   if Debug.test_noflag debug_parse_only then
+    (* Try add a new declaration *)
+    (* Do not add if we only parse the input file *)
     let muc = Loc.try4 ~loc add_decl muc slice.env slice.file d in
     slice.muc <- Some muc
 
