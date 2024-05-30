@@ -19,11 +19,20 @@ open Term
 type dty
 
 val dty_fresh : unit -> dty
+  (** [dty_fresh ()] creates a fresh [Dvar] indexed by some integer *)
 
 val dty_of_ty : ty -> dty
+  (** [dty_of_ty ty] wraps [ty] in a [Duty] constructor *)
 
 val dty_var : tvsymbol -> dty
+  (** [dty_var tv] first wraps [tv] into a [ty] using [ty_var], and
+      then wraps the created [ty] in a [Duty] constructor *)
+
 val dty_app : tysymbol -> dty list -> dty
+  (** [dty_app ts dtl] first tries to unwrap [dtl] into a list of [tl : ty list],
+      assumming that all elements of [dtl] are wrapped by [Duty] constructor.
+      If success, then [ty_app ts tl] is called, and the new type will be wrapped
+      in a [Duty] constructor *)
 
 val dty_match : dty -> ty  -> unit (* raises Exit on failure *)
 val dty_unify : dty -> dty -> unit (* raises Exit on failure *)

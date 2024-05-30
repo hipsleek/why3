@@ -328,6 +328,17 @@ let dt_app ls el =
 (* track the use of labels *)
 let at_uses = Hstr.create 5
 
+(* ns:Theory.namespace
+   -> km:Decl.known_map
+   -> crcmap:Coercion.t
+   -> gvars:(string option -> Ptree.qualid -> Ity.pvsymbol option)
+   -> at:string option
+   -> denv:Dterm.dterm_node Wstdlib.Hstr.t
+   -> {term_desc = desc; term_loc = loc}:Ptree.term
+   -> Dterm.term
+
+  Convert a Ptree.term to a Dterm.term
+ *)
 let rec dterm ns km crcmap gvars at denv {term_desc = desc; term_loc = loc} =
   let func_app e el =
     List.fold_left (fun e1 (loc, e2) ->

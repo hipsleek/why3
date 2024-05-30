@@ -37,17 +37,27 @@ let rec dty_app ts dtl =
     Duty (ty_app ts tl)
   with Exit -> match ts.ts_def with
     | Alias ty ->
+        (* map from type var (tv) to (dty) *)
         let sbs = try List.fold_right2 Mtv.add ts.ts_args dtl Mtv.empty with
           | Invalid_argument _ -> raise (BadTypeArity (ts, List.length dtl)) in
         let rec inst ty = match ty.ty_node with
+          (* Instantiate all types in the type list,
+             then, retry dty_app, with unaliased type, again *)
           | Tyapp (ts,tl) -> dty_app ts (List.map inst tl)
+          (* If this is just a type var, find the mapped to type *)
           | Tyvar v -> Mtv.find v sbs in
         inst ty
     | NoDef | Range _ | Float _ ->
         if List.length ts.ts_args <> List.length dtl then
           raise (BadTypeArity (ts, List.length dtl));
+        (* Uninterpreted *)
         Dapp (ts, dtl)
 
+(* fnS:(Ty.tysymbol -> 'a list -> 'a) ->
+   fnV:(Ty.tvsymbol -> 'a) ->
+   fnI:(int -> 'a) ->
+   dty -> 'a
+ *)
 let dty_fold fnS fnV fnI dty =
   let rec on_ty ty = match ty.ty_node with
     | Tyapp (s, tl) -> fnS s (List.map on_ty tl)
@@ -65,6 +75,8 @@ let rec ty_of_dty ~strict = function
   | Dvar { contents = Dval (Duty ty) } ->
       ty
   | Dvar ({ contents = Dval dty } as r) ->
+      (* Reduce the content of the referennce
+         to just a single Duty wrapped around a ty *)
       let ty = ty_of_dty ~strict dty in
       r := Dval (Duty ty); ty
   | Dvar r ->
@@ -76,12 +88,14 @@ let rec ty_of_dty ~strict = function
       ty_app ts (List.map (ty_of_dty ~strict) dl)
   | Duty ty -> ty
 
+(* Raise Exit if type index `i` appear in the dty *)
 let rec occur_check i = function
   | Dvar { contents = Dval d } -> occur_check i d
   | Dvar { contents = Dind j } -> if i = j then raise Exit
   | Dapp (_,dl) -> List.iter (occur_check i) dl
   | Duty _ -> ()
 
+(* Support for unification *)
 let rec dty_match dty ty = match dty, ty.ty_node with
   | Dvar { contents = Dval dty }, _ -> dty_match dty ty
   | Dvar r, _ -> r := Dval (Duty ty)
@@ -90,19 +104,25 @@ let rec dty_match dty ty = match dty, ty.ty_node with
       List.iter2 dty_match dl tl
   | _ -> raise Exit
 
+(* Unify two types together *)
 let rec dty_unify dty1 dty2 = match dty1,dty2 with
   | Dvar { contents = Dval dty1 }, dty2
-  | dty1, Dvar { contents = Dval dty2 } -> dty_unify dty1 dty2
+  | dty1, Dvar { contents = Dval dty2 } ->
+      dty_unify dty1 dty2
   | Dvar { contents = Dind i },
-    Dvar { contents = Dind j } when i = j -> ()
+    Dvar { contents = Dind j } when i = j ->
+      ()
   | Dvar ({ contents = Dind i } as r), dty
   | dty, Dvar ({ contents = Dind i } as r) ->
       occur_check i dty; r := Dval dty
-  | dty, Duty ty | Duty ty, dty -> dty_match dty ty
+  | dty, Duty ty
+  | Duty ty, dty ->
+      dty_match dty ty
   | Dapp (ts1,dl1), Dapp (ts2,dl2) when ts_equal ts1 ts2 ->
       List.iter2 dty_unify dl1 dl2
   | _ -> raise Exit
 
+(* dty version of built-in types *)
 let dty_int  = Duty ty_int
 let dty_real = Duty ty_real
 let dty_bool = Duty ty_bool
@@ -143,7 +163,9 @@ let print_dty = let ht = Hint.create 3 in fun fmt dty ->
 (** Symbols *)
 
 let specialize_ls ls =
+  (* dty Ty.Htv.t *)
   let htv = Htv.create 3 in
+  (* compute if absent *)
   let find_tv tv = try Htv.find htv tv with Not_found ->
     let dtv = dty_fresh () in Htv.add htv tv dtv; dtv in
   let rec spec ty = match ty.ty_node with
@@ -160,6 +182,7 @@ let specialize_fs ls =
   | None -> raise (FunctionSymbolExpected ls)
 *)
 
+(* specialize constructor *)
 let specialize_cs ls =
   if ls.ls_constr = 0 then raise (ConstructorExpected ls);
   let dtyl, dty = specialize_ls ls in
@@ -208,7 +231,7 @@ type dterm = {
 
 and dterm_node =
   | DTvar of string * dty
-  | DTgvar of vsymbol
+  | DTgvar of vsymbol (* Goal var *)
   | DTconst of Constant.constant * dty
   | DTapp of lsymbol * dterm list
   | DTfapp of dterm * dterm
@@ -239,32 +262,43 @@ let dty_unify_app_map ls unify (l1: 'a list) (l2: dty list) =
   try List.map2 unify l1 l2 with Invalid_argument _ ->
     raise (BadArity (ls, List.length l1))
 
+(* Type check a dpattern *)
 let dpat_expected_type dp dty =
   try dty_unify dp.dp_dty dty with Exit -> Loc.errorm ?loc:dp.dp_loc
     "This pattern has type %a,@ but is expected to have type %a"
     print_dty dp.dp_dty print_dty dty
 
+(* Type check a argument: by trying to unify the type of the argument
+   with the expected type *)
 let darg_expected_type ?loc dt_dty dty =
   try dty_unify dt_dty dty with Exit -> Loc.errorm ?loc
     "This term has type %a,@ but is expected to have type %a"
     print_dty dt_dty print_dty dty
 
+(* Term can have arbitrary type. If dt.dt_dty is None, then that
+   means the term should be a proposition (bool type) *)
 let dterm_expected_type dt dty = match dt.dt_dty with
   | Some dt_dty -> darg_expected_type ?loc:dt.dt_loc dt_dty dty
   | None -> begin try dty_unify dty_bool dty with Exit ->
       Loc.error ?loc:dt.dt_loc TermExpected end
 
+(* Type of formula is always bool *)
 let dfmla_expected_type dt = match dt.dt_dty with
   | Some dt_dty -> begin try dty_unify dt_dty dty_bool with Exit ->
       Loc.error ?loc:dt.dt_loc FmlaExpected end
   | None -> ()
 
+(* Given an expression, it can either be a normal expression, or it
+   can be a formula
+   TODO: Check Dexpr *)
 let dexpr_expected_type dt dty = match dty with
   | Some dty -> dterm_expected_type dt dty
   | None -> dfmla_expected_type dt
 
 (** Environment *)
 
+(* Map from variable name to the actual term *)
+(* Used for type check? *)
 type denv = dterm_node Mstr.t
 
 exception DuplicateVar of string
@@ -284,6 +318,7 @@ let denv_add_var denv {pre_name = n} dty =
 let denv_add_let denv dt {pre_name = n} =
   Mstr.add n (DTvar (n, dty_of_dterm dt)) denv
 
+(* Add quantified variables into the environment *)
 let denv_add_quant denv vl =
   let add acc (id,dty,_) = match id with
     | Some ({pre_name = n} as id) ->
@@ -295,6 +330,7 @@ let denv_add_quant denv vl =
   let s = List.fold_left add Mstr.empty vl in
   Mstr.set_union s denv
 
+(* Add variables that are used at pattern into the enviroment *)
 let denv_add_pat denv dp dty =
   dpat_expected_type dp dty;
   let s = Mstr.mapi (fun n dty -> DTvar (n, dty)) dp.dp_vars in
@@ -305,6 +341,7 @@ let denv_add_term_pat denv dp dt =
 
 (** Constructors *)
 
+(* Builds a dpattern from a dpattern_node *)
 let dpattern ?loc node =
   let get_dty = function
     | DPwild ->
@@ -426,8 +463,10 @@ let dterm_expected_dterm crcmap dt dty =
 let dfmla_expected_dterm crcmap dt =
   dexpr_expected_dexpr crcmap dt None
 
+(* Construct a dterm from a dterm_node *)
 let dterm crcmap ?loc node =
   let dterm_node loc node =
+    (* make dterm with dty *)
     let mk_dty ty = { dt_node = node; dt_dty = ty; dt_loc = loc } in
     match node with
     | DTvar (_,dty) ->
@@ -530,6 +569,8 @@ let term_ty_of_dty ~strict dty =
     "This@ term@ has@ polymorphic@ type@ %a@ where@ type@ variable@ %a@ \
       is@ never@ named@ explicitly" print_dty dty Pretty.print_tv tv
 
+
+(* Convert a dpattern to a pattern *)
 let pattern ~strict env dp =
   let acc = ref Mstr.empty in
   let find_var ({pre_name = n} as id) ty =
@@ -604,6 +645,8 @@ let rec strip uloc attrs dt = match dt.dt_node with
   | DTattr (dt,s) -> strip uloc (Sattr.union attrs s) dt
   | _ -> uloc, attrs, dt
 
+(* Finally, convert a dtype to a term *)
+(* prop: whether the term is a prop or not *)
 let rec term ~strict ~keep_loc uloc env prop dt =
   let uloc, attrs, dt = strip uloc Sattr.empty dt in
   let tloc = if keep_loc then dt.dt_loc else None in
@@ -714,9 +757,11 @@ and try_term strict keep_loc uloc env prop dty node =
   | DTcast _ | DTuloc _ | DTattr _ ->
       assert false (* already stripped *)
 
+(* Construct a formula (prop formula) *)
 let fmla ?(strict=true) ?(keep_loc=true) dt =
   term ~strict ~keep_loc None Mstr.empty true dt
 
+(* Construct a term (program level) *)
 let term ?(strict=true) ?(keep_loc=true) dt =
   term ~strict ~keep_loc None Mstr.empty false dt
 
