@@ -130,7 +130,7 @@ let extension_table = ref Mstr.empty
 let register_format ~desc lang ff extl fp =
   (* decorate the old parser *)
   (* store after the old parser returns *)
-  Debug.dprintf debug_trace_env "register_format: ff=%s@." ff;
+  Debug.dprintf debug_trace_env "[Env.register_format] ff=%s@." ff;
   let fp env path fn ch = store lang env path (fp env path fn ch) in
   register_format lang (ff,extl,desc) fp;
   (* also register the file format in the extension table *)
@@ -163,12 +163,10 @@ let get_format ?format file =
       let ext = get_extension file in
       Mstr.find_exn (UnknownExtension ext) ext !extension_table
   in
-  (* Debug.dprintf debug_trace_env "get_format: %s@." ff; *)
   ff
 
 (* ff : string *)
 let get_parser lang ff =
-  (* Debug.dprintf debug_trace_env "get_parser: %s@." ff; *)
   try Mstr.find ff lang.fmts
   with Not_found ->
     if Mstr.mem ff base_language.fmts

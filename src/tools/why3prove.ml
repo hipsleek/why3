@@ -523,13 +523,10 @@ let do_local_theory config env drv fname m (tname,_,t,glist,elist) =
 let do_input config env drv = function
   | None, _ when Debug.test_flag Typing.debug_type_only ||
                  Debug.test_flag Typing.debug_parse_only ->
-      Debug.dprintf debug_trace_why3prove "do_input: None, _@.";
       ()
   | None, tlist ->
-      Debug.dprintf debug_trace_why3prove "do_input: None, tlist@.";
       Queue.iter (do_global_theory config env drv) tlist
   | Some f, tlist ->
-      Debug.dprintf debug_trace_why3prove "do_input: Some f, tlist@.";
       let format = !opt_parser in
       let fname, m = match f with
         (* The parser is called here *)

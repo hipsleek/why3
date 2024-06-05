@@ -25,6 +25,7 @@ type dity =
   | Durg of dity * region     (* undestructible "user" region *)
   | Dapp of itysymbol * dity list * dity list
 
+(* support type unification? For type inference *)
 and dvar =
   | Dval of dity              (* i am equal to dity *)
   | Dpur of dity              (* i am equal to the purified dity *)
@@ -34,8 +35,8 @@ and dvar =
 
 (* In Dreg and Durg, the dity field is a Dapp of the region's type. *)
 
-type dvty = dity list * dity (* A -> B -> C == ([A;B],C) *)
-type dref = bool list * bool
+type dvty = dity list * dity (* A -> B -> C == ([A;B],C), type of function *)
+type dref = bool list * bool (* is ref or not? *)
 
 let dity_of_dvty (argl,res) =
   List.fold_right (fun a d -> Dapp (its_func, [a;d], [])) argl res
@@ -347,7 +348,7 @@ type dxsymbol =
 
 let specialize_dxs = function
   | DEgexn xs -> specialize_single xs.xs_ity
-  | DElexn (_,dity) -> dity
+  | DElexn (_, dity) -> dity
 
 (** Patterns *)
 
@@ -610,8 +611,8 @@ let denv_add_let denv (id,_,_,({de_dvty = (argl,res as dvty)} as de)) =
   if is_value de then denv_add_poly denv id dvty dref
                  else denv_add_mono denv id dvty dref
 
-let denv_add_args {frozen = fz; locals = ls; excpts = xs} bl =
-  let l = List.fold_left (fun l (_,_,t) -> t::l) fz bl in
+let denv_add_args {frozen = fz; locals = ls; excpts = xs} (bl : dbinder list) =
+  let l : dity list = List.fold_left (fun l (_,_,t) -> t::l) fz bl in
   let add s (id,_,t) = match id with
     | Some ({pre_name = n} as id) ->
         let dvty = [], t and dref = [], id_dref id t in
@@ -658,6 +659,12 @@ let denv_get_exn denv n = Mstr.find_exn (UnboundExn n) n denv.excpts
 
 let denv_get_exn_opt denv n = Mstr.find_opt n denv.excpts
 
+(* Lift a function:
+   Dterm.denv -> Dterm.dty
+        |             |
+        v             v
+   Dexpr.denv -> Dexpr.dity
+ *)
 let denv_pure denv get_dty =
   let ht = Htv.create 3 in
   let hi = Hint.create 3 in
@@ -694,6 +701,7 @@ type pre_fun_defn = preid * ghost * rs_kind * dbinder list *
 
 exception DupId of preid
 
+(* drec_defn : denv -> pre_fun_defn list -> denv * drec_defn *)
 let drec_defn ({frozen = frz} as denv0) prel =
   if prel = [] then invalid_arg "Dexpr.drec_defn: empty function list";
   let add s (id,_,_,_,_,_,_) = Sstr.add_new (DupId id) id.pre_name s in
@@ -1733,10 +1741,10 @@ and sym_defn uloc env (id,gh,kind,de) =
   let ld, s = let_sym id ~ghost:(lgh || cgh) ~kind c in
   LS ld :: ldl, add_rsymbol env s
 
-and rec_defn uloc ({inr = inr} as env0) {fds = dfdl} =
-  let step1 env (id, gh, kind, bl, res, mask, dsp, dvl, de) =
+and rec_defn (uloc : Loc.position option option) ({inr = inr} as env0) {fds = dfdl} =
+  let step1 env (id, gh, kind, bl, res, mask, dsp, dvl, de : dfun_defn) =
     let ghost = env.ghs || gh || kind = RKlemma in
-    let pvl = binders ghost bl in
+    let pvl : pvsymbol list = binders ghost bl in
     let ity = Loc.try1 ?loc:de.de_loc ity_of_dity res in
     let cty = create_cty ~mask pvl [] [] Mxs.empty Mpv.empty eff_empty ity in
     let rs = create_rsymbol id ~ghost ~kind:RKnone cty in
@@ -1753,13 +1761,17 @@ and rec_defn uloc ({inr = inr} as env0) {fds = dfdl} =
       "Function %s returns unexpected ghost results" nm;
     (rs, lam, dvl, kind)::fdl, dsp::dspl in
   (* check for unexpected aliases in case of trouble *)
-  let fdl, dspl = try List.fold_right step2 fdl ([],[]) with
-    | Loc.Located (_, Ity.TypeMismatch _) | Ity.TypeMismatch _ as exn ->
+  let fdl,
+      (dspl : dspec_final list) = try List.fold_right step2 fdl ([],[]) with
+    | Loc.Located (_, Ity.TypeMismatch _)
+    | Ity.TypeMismatch _ as exn ->
         List.iter (fun ({rs_name = {id_loc = loc}} as rs,_,_,_,_,_) ->
           Loc.try2 ?loc check_aliases true rs.rs_cty) fdl;
         raise exn in
-  let ld, rdl = try let_rec fdl with
-    | Loc.Located (_, Ity.TypeMismatch _) | Ity.TypeMismatch _ as exn ->
+  let (ld : Expr.let_defn),
+      (rdl : Expr.rec_defn list) = try let_rec fdl with
+    | Loc.Located (_, Ity.TypeMismatch _)
+    | Ity.TypeMismatch _ as exn ->
         List.iter (fun ({rs_name = {id_loc = loc}},lam,_,_) ->
           Loc.try2 ?loc check_aliases true lam.c_cty) fdl;
         raise exn in

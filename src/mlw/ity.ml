@@ -843,6 +843,7 @@ let rec mask_sub mask1 mask2 = match mask1, mask2 with
 
 let mask_spill mask1 mask2 = not (mask_sub mask1 mask2)
 
+(* Exception symbol *)
 type xsymbol = {
   xs_name : ident;
   xs_ity  : ity; (* closed and pure *)

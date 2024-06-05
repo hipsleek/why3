@@ -85,6 +85,12 @@ let symbol_kind_to_string qs =
    the namespace queried: find_*_ns. *)
 exception UnboundSymbol of (symbol_kind * qualid)
 
+(* ty:symbol_kind ->
+   get_id:('a -> Ident.ident) ->
+   find:(namespace -> pathname -> 'a) ->
+   ns:namespace ->
+   q:Ptree.qualid ->
+   'a *)
 let find_qualid ~ty get_id find ns q =
   let sl = string_list_of_qualid q in
   let r = try find ns sl with Not_found ->
@@ -147,6 +153,7 @@ let import_scope ~loc ns sl =
 
 (** Parsing types *)
 
+(* From parse tree type [pty] to normal type [ty] *)
 let rec ty_of_pty ns = function
   | PTtyvar {id_str = x} ->
       ty_var (tv_of_string x)
@@ -155,6 +162,7 @@ let rec ty_of_pty ns = function
       let tyl = List.map (ty_of_pty ns) tyl in
       Loc.try2 ~loc:(qloc q) ty_app ts tyl
   | PTtuple tyl ->
+      (* itysymbol *)
       let s = its_tuple (List.length tyl) in
       ty_app s.its_ts (List.map (ty_of_pty ns) tyl)
   | PTref tyl ->
@@ -162,12 +170,14 @@ let rec ty_of_pty ns = function
   | PTarrow (ty1, ty2) ->
       ty_func (ty_of_pty ns ty1) (ty_of_pty ns ty2)
   | PTscope (q, ty) ->
+      (* Under scope, we extend the current namespace for looking up identifiers *)
       let loc = qloc q in
       let ns = import_namespace ~loc ns (string_list_of_qualid q) in
       ty_of_pty ns ty
   | PTpure ty | PTparen ty ->
       ty_of_pty ns ty
 
+(* pty -> ty -> dty *)
 let dty_of_pty ns pty =
   Dterm.dty_of_ty (ty_of_pty ns pty)
 
@@ -188,7 +198,9 @@ let dty_of_opt ns = function
 
 let create_user_prog_id {id_str = n; id_ats = attrs; id_loc = loc} =
   let get_attrs (attrs, loc) = function
-    | ATstr attr -> Sattr.add attr attrs, loc | ATpos loc -> attrs, loc in
+    | ATstr attr -> Sattr.add attr attrs, loc
+    | ATpos loc -> attrs, loc
+  in
   let attrs, loc = List.fold_left get_attrs (Sattr.empty, loc) attrs in
   id_user ~attrs n loc
 
@@ -198,12 +210,27 @@ let create_user_id id =
     "reference markers are only admitted over program variables";
   id
 
+(* loc:Loc.position ->
+   ns:Theory.namespace ->
+   km:Decl.known_map ->
+   get_val:(Term.lsymbol -> Term.lsymbol -> 'a option -> 'b) ->
+   fl:(Ptree.qualid * 'a) list ->
+   Term.lsymbol * 'b list
+
+   fl should be "field list"
+   SHADOWING Decl.parse_record
+ *)
 let parse_record ~loc ns km get_val fl =
+  (* (Term.lsymbol * 'a) list *)
   let fl = List.map (fun (q,e) -> find_lsymbol_ns ns q, e) fl in
+  (* cs "constructor" *)
+  (* pjl "projections list" *)
+  (* flm "field map" : map from lssymbol to some value *)
   let cs,pjl,flm = Loc.try2 ~loc parse_record km fl in
   let get_val pj = get_val cs pj (Mls.find_opt pj flm) in
   cs, List.map get_val pjl
 
+(* Convert Ptree.pattern to Dterm.dpattern *)
 let rec dpattern ns km { pat_desc = desc; pat_loc = loc } =
   match desc with
     | Ptree.Pparen p -> dpattern ns km p
@@ -235,6 +262,7 @@ let rec dpattern ns km { pat_desc = desc; pat_loc = loc } =
     | Ptree.Pghost _ | Ptree.Pas (_,_,true) ->
         Loc.errorm ~loc "ghost patterns are only allowed in programs")
 
+(* Convert ptree var to dterm var *)
 let quant_var ns (loc, id, gh, ty) =
   if gh then Loc.errorm ~loc "ghost variables are only allowed in programs";
   Option.map create_user_id id, dty_of_opt ns ty, Some loc
@@ -266,6 +294,7 @@ let is_reusable dt = match dt.dt_node with
   | DTapp (_,[]) -> true
   | _ -> false
 
+(* make a variable that can hold the term `dt` *)
 let mk_var crcmap n dt =
   let dty = match dt.dt_dty with
     | None -> dty_of_ty ty_bool
@@ -541,10 +570,12 @@ let no_gvars at q = match at with
       "`at' and `old' can only be used in program annotations"
   | None -> None
 
+(* Ptree.term -> dterm -> Term.term *)
 let type_term_in_namespace ns km crcmap t =
   let t = dterm ns km crcmap no_gvars None Dterm.denv_empty t in
   Dterm.term ~strict:true ~keep_loc:true t
 
+(* Ptree.term -> dterm -> Term.term *)
 let type_fmla_in_namespace ns km crcmap f =
   let f = dterm ns km crcmap no_gvars None Dterm.denv_empty f in
   Dterm.fmla ~strict:true ~keep_loc:true f
@@ -559,6 +590,7 @@ let ty_of_pty tuc = ty_of_pty (get_namespace tuc)
 let get_namespace muc = List.hd muc.Pmodule.muc_import
 let get_namespace_export muc = List.hd muc.Pmodule.muc_export
 
+(* Build a dterm, but this time the argument is a module under construction *)
 let dterm muc =
   let uc = muc.muc_theory in
   dterm (Theory.get_namespace uc) uc.uc_known uc.uc_crcmap
@@ -583,6 +615,7 @@ let find_special muc test nm q =
       end
   | _ ->      Loc.errorm ~loc:(qloc q) "Not a %s: %a" nm print_qualid q
 
+(* pty -> ity*)
 let rec ity_of_pty muc = function
   | PTtyvar {id_str = x} ->
       ity_var (tv_of_string x)
@@ -606,6 +639,7 @@ let rec ity_of_pty muc = function
   | PTparen ty ->
       ity_of_pty muc ty
 
+(* pty -> ity -> dity *)
 let dity_of_pty muc pty =
   Dexpr.dity_of_ity (ity_of_pty muc pty)
 
@@ -696,15 +730,26 @@ let dpattern muc pat = dpattern muc false pat
 
 (* specifications *)
 
-let find_global_pv muc q = try match find_prog_symbol muc q with
-  | PV v -> Some v | _ -> None with _ -> None
+let find_global_pv muc q =
+  try
+    match find_prog_symbol muc q with
+      | PV v -> Some v
+      | _ -> None
+  with _ -> None
 
 let find_local_pv muc lvm q = match q with
   | Qdot _ -> find_global_pv muc q
   | Qident id -> let ovs = Mstr.find_opt id.id_str lvm in
       if ovs = None then find_global_pv muc q else ovs
 
-let mk_gvars muc lvm old = fun at q ->
+(* muc:Pmodule.pmodule_uc ->
+   lvm:Ity.pvsymbol Mstr.t ->
+   old:('a -> Ity.pvsymbol -> Ity.pvsymbol) ->
+   at:'a option ->
+   q:Ptree.qualid ->
+   Ity.pvsymbol option
+ *)
+let mk_gvars muc lvm old at q =
   match find_local_pv muc lvm q, at with
   | Some v, Some l -> Some (old l v)
   | None, Some l ->
@@ -716,28 +761,45 @@ let mk_gvars muc lvm old = fun at q ->
       | _ -> None end
   | v, None -> v
 
+(* Ptree.term -> dterm -> Term.term (program) *)
 let type_term muc lvm old t =
   let gvars = mk_gvars muc lvm old in
   let t = dterm muc gvars None Dterm.denv_empty t in
   Dterm.term ~strict:true ~keep_loc:true t
 
+(* Ptree.term -> dterm -> Term.term (formula) *)
 let type_fmla muc lvm old f =
   let gvars = mk_gvars muc lvm old in
   let f = dterm muc gvars None Dterm.denv_empty f in
   Dterm.fmla ~strict:true ~keep_loc:true f
 
+(* Ptree.term list -> Term.term list (formula) *)
+(* Precondition? *)
 let dpre muc pl lvm old =
   let dpre f = type_fmla muc lvm old f in
   List.map dpre pl
 
+(* Make post condition *)
+(* ql : list of pattern? *)
+(* lvm : logic variable map? *)
+(* SHADOWED *)
 let dpost muc ql lvm old ity =
   let mk_case loc pfl =
+    (* new symbol 'result', used in post condition *)
     let v = create_pvsymbol (id_fresh "result") ity in
+    (* identidier : (null) - just a placeholder *)
     let i = { id_str = "(null)"; id_loc = loc; id_ats = [] } in
+    (* A term for this placeholder identifier, as if the identifier is declared *)
     let t = { term_desc = Tident (Qident i); term_loc = loc } in
+    (* A term which is of the form 'match (null) <cases>' *)
+    (* 'f' stands for 'formula'. This 'formula' will be converted to a typed term *)
     let f = { term_desc = Ptree.Tcase (t, pfl); term_loc = loc } in
+    (* Add this new variable to the environment *)
     let lvm = Mstr.add "(null)" v lvm in
+    (* Create a formula for this case *)
     v, Loc.try3 ~loc type_fmla muc lvm old f in
+  (* Creates a post-condition with a single case analysis *)
+  (* pfl : 'pattern formula list?' *)
   let dpost (loc,pfl) = match pfl with
     | [pat, f] ->
         let rec unfold p = match p.pat_desc with
@@ -747,6 +809,7 @@ let dpost muc ql lvm old ity =
               Loc.try2 ~loc:p.pat_loc ty_equal_check (ty_of_ity ity) ty;
               unfold p
           | Ptree.Ptuple [] ->
+              (* match with empty tuple (unit) *)
               Loc.try2 ~loc:p.pat_loc ity_equal_check ity ity_unit;
               unfold { p with pat_desc = Ptree.Pwild }
           | Ptree.Pwild ->
@@ -761,6 +824,7 @@ let dpost muc ql lvm old ity =
     | _ -> mk_case loc pfl in
   List.map dpost ql
 
+(* SHADOWING *)
 let dpost muc ids ql lvm old ity =
   let check_id id =
     if Sstr.mem id.id_str ids then Loc.errorm ~loc:id.id_loc
@@ -774,16 +838,20 @@ let dpost muc ids ql lvm old ity =
     | Ptree.Por (p, _) | Ptree.Pcast (p, _)
     | Ptree.Pscope (_, p) | Ptree.Pparen p | Ptree.Pghost p -> check p in
   let check (p, _) = check p in
+  (* Check for potential name collision *)
   List.iter (fun (_,pfl) -> List.iter check pfl) ql;
   dpost muc ql lvm old ity
 
 let dxpost muc ids ql lvm xsm old =
   let add_exn (q,pf) m =
+    (* pf : 'pattern formula' *)
+    (* find exception symbol *)
     let xs = match q with
       | Qident i ->
           begin try Mstr.find i.id_str xsm with
           | Not_found -> find_xsymbol muc q end
       | _ -> find_xsymbol muc q in
+    (* Add the new pf into the mapping? *)
     Mxs.change (fun l -> match pf, l with
       | Some pf, Some l -> Some (pf :: l)
       | Some pf, None   -> Some (pf :: [])
@@ -799,26 +867,33 @@ let dxpost muc ids ql lvm xsm old =
     Mxs.union (fun _ l r -> Some (l @ r)) (exn_map ql) m in
   List.fold_right add_map ql Mxs.empty
 
+(* Return a list of variables that are read in the function *)
 let dreads muc rl lvm =
-  let dreads q = match find_local_pv muc lvm q with Some v -> v
+  let dreads q = match find_local_pv muc lvm q with
+    | Some v -> v
     | None -> Loc.errorm ~loc:(qloc q) "Not a variable: %a" print_qualid q in
   List.map dreads rl
 
+(* Return a list of terms, each of which is the expression begin written into *)
 let dwrites muc wl lvm =
   let old _ _ = Loc.errorm
     "`at' and `old' cannot be used in the `writes' clause" in
   let dwrites t = type_term muc lvm old t in
   List.map dwrites wl
 
+(* Fine the logic symbol representing the variant *)
 let find_variant_ls muc q = match find_lsymbol muc.muc_theory q with
   | { ls_args = [u;v]; ls_value = None } as ls when ty_equal u v -> ls
   | s -> Loc.errorm ~loc:(qloc q) "Not an order relation: %a" Pretty.print_ls s
 
+(* _xsm is ignored *)
 let dvariant muc varl lvm _xsm old =
   let dvar t = type_term muc lvm old t in
   let dvar (t,q) = dvar t, Option.map (find_variant_ls muc) q in
   List.map dvar varl
 
+(* From a Ptree.spec, create a Dexpr.spec_final *)
+(* SHADOWED *)
 let dspec muc ids sp lvm xsm old ity = {
   ds_pre     = dpre muc sp.sp_pre lvm old;
   ds_post    = dpost muc ids sp.sp_post lvm old ity;
@@ -829,7 +904,10 @@ let dspec muc ids sp lvm xsm old ity = {
   ds_diverge = sp.sp_diverge;
   ds_partial = sp.sp_partial; }
 
+(* SHADOWING *)
 let dspec muc pl sp =
+  (* Just add all identifiers into a set, checking that there is no identifier that
+     is named 'result' *)
   let add_ident acc (a,_,_) = match a with
     | None -> acc
     | Some { pre_name = s ; pre_loc = loc } ->
@@ -852,13 +930,16 @@ let dinvariant muc f lvm _xsm old = dpre muc f lvm old
 let dparam muc (_,id,gh,pty) =
   Option.map create_user_prog_id id, gh, dity_of_pty muc pty
 
+(* If there is no declared type, create a new type variable *)
 let dbinder muc (_,id,gh,opt) =
   Option.map create_user_prog_id id, gh, dity_of_opt muc opt
 
 (* expressions *)
 
 let is_reusable de = match de.de_node with
-  | DEvar _ | DEsym _ -> true | _ -> false
+  | DEvar _
+  | DEsym _ -> true
+  | _ -> false
 
 let mk_var n { de_dvty = (argl, _ as dvty); de_loc = loc } =
   let dref = List.map Util.ffalse argl, false in
@@ -881,6 +962,7 @@ let undereference ({de_loc = loc} as de) =
   try Dexpr.undereference de with Not_found ->
     Loc.errorm ?loc "not a reference variable"
 
+(* Ptree.term -> Dexpr.dexpr *)
 let rec eff_dterm muc denv {term_desc = desc; term_loc = loc} =
   let expr_app loc e el =
     List.fold_left (fun e1 e2 ->
@@ -928,6 +1010,7 @@ let rec eff_dterm muc denv {term_desc = desc; term_loc = loc} =
   | Ptree.Tquant _ | Ptree.Trecord _ | Ptree.Tupdate _ | Ptree.Teps _ ->
       Loc.errorm ~loc "unsupported effect expression")
 
+(* Transformation on the original PTree itself *)
 let tick_lemma id =
   { id with id_str = id.id_str ^ "'lemma" }
 
@@ -935,6 +1018,7 @@ let tick_lemma = function
   | Qident id -> Qident (tick_lemma id)
   | Qdot (u, id) -> Qdot (u, tick_lemma id)
 
+(* Ptree.expr -> Dexpr.dexpr *)
 let rec dexpr muc denv {expr_desc = desc; expr_loc = loc} =
   let expr_app loc e el =
     List.fold_left (fun e1 e2 ->
@@ -1207,8 +1291,11 @@ and drec_defn muc denv fdl =
     if sp.sp_alias <> []
     then Loc.errorm ~loc:id.id_loc
            "alias is forbidden in recursive functions";
+    (* bl : (preid option * bool * dity) list "binder list" *)
     let bl = List.map (dbinder muc) bl in
+    (* dity : "return type" *)
     let dity = dity_of_opt muc pty in
+    (* pre : denv -> pre_fun *)
     let pre denv =
       let denv = denv_add_args denv bl in
       let dv = dvariant muc sp.sp_variant in
@@ -1217,6 +1304,7 @@ and drec_defn muc denv fdl =
   Dexpr.drec_defn denv (List.map prep fdl)
 
 
+(* Ptree.expr -> Dexpr.dexpr -> Expr.expr *)
 let type_expr_in_muc muc ?(denv=Dexpr.denv_empty) expr =
   let e = dexpr muc denv expr in
   Dexpr.expr e
@@ -1256,6 +1344,7 @@ let check_public ~loc d name =
   if d.td_wit <> None then
     Loc.errorm ~loc "%s types cannot have witnesses" name
 
+(* Create an expr representing the witness for the constructability of a type *)
 let type_wit muc nms fl dwit =
   let convert_record loc tl =
     let add_w m (q,e) =
@@ -1498,7 +1587,9 @@ let add_logics muc dl =
   (* 1. create all symbols and make an environment with these symbols *)
   let create_symbol mkk d =
     let id = create_user_id d.ld_ident in
+    (* types of parameters - collected in a list *)
     let pl = tyl_of_params muc d.ld_params in
+    (* return type of the function *)
     let ty = Option.map (ty_of_pty muc.muc_theory) d.ld_type in
     let ls = create_lsymbol id pl ty in
     Hstr.add lsymbols d.ld_ident.id_str ls;
@@ -1567,6 +1658,7 @@ let add_inductives muc s dl =
 (* turn a lemma into a lemma function *)
 let create_val muc id f =
   let id = id_derive (id.id_string ^ "'lemma") id in
+  (* From term to expr here *)
   match c_any (Expr.cty_from_formula f) with
   | cexp ->
       let ld, _ = let_sym id ~ghost:true cexp in
@@ -1592,6 +1684,7 @@ let find_module env file q =
   m
 
 let type_inst ({muc_theory = tuc} as muc) ({mod_theory = t} as m) s =
+  (* Pmodule.mod_inst -> Ptree.clone_subst -> Pmodule.mod_inst *)
   let add_inst s = function
     | CStsym (p,[],PTtyapp (q,[])) ->
         let ts1 = find_tysymbol_ns t.th_export p in
@@ -1705,9 +1798,13 @@ let rec add_decl muc env file d =
       add_meta muc (lookup_meta id.id_str) (List.map convert al)
   | Ptree.Dlet (id, gh, kind, e) ->
       let e = update_any kind e in
+      (* ld : preid * ghost * rs_kind * dexpr = dlet_defn "let definition" *)
       let ld = create_user_prog_id id, gh, kind, dexpr muc denv_empty e in
+      (* the expression will be converted into a dexpr *)
+      (* then, we wrap the dexpr in a dlet_defn and let_decl and add it to the muc *)
       add_pdecl ~vc muc (create_let_decl (let_defn ~keep_loc:true ld))
   | Ptree.Drec fdl ->
+      (* rd : drec_defn "rec definition" *)
       let _, rd = drec_defn muc denv_empty fdl in
       add_pdecl ~vc muc (create_let_decl (rec_defn ~keep_loc:true rd))
   | Ptree.Dexn (id, pty, mask) ->
@@ -1749,18 +1846,24 @@ let rec add_decl muc env file d =
 let type_module file env loc path (id,dl) =
   let muc = create_module env ~path (create_user_id id) in
   let add_decl_env_file muc d = add_decl muc env file d in
+  (* Construct a module by adding all declarations *)
   let muc = List.fold_left add_decl_env_file muc dl in
+  (* Finalize the construction *)
   let m = Loc.try1 ~loc close_module muc in
+  (* Add the newly constructed module into the set of modules (in a single file) *)
   let file = Mstr.add m.mod_theory.th_name.id_string m file in
   file
 
+(* Entry point - from a Ptree.mlw_file, we construct a map of modules *)
 let type_mlw_file env path filename mlw_file =
   if Debug.test_flag Glob.flag then Glob.clear filename;
   let file = Mstr.empty in
   let loc = Loc.user_position filename 1 0 1 0 in
   let file =
     match mlw_file with
+    (* The map contains a single module if the file only contains declarations *)
     | Ptree.Decls decls -> type_module file env loc path ({id_str=""; id_ats=[]; id_loc=loc},decls)
+    (* Otherwise, for each module declared, we sequentially add it into the map *)
     | Ptree.Modules m_or_t ->
         let type_module_env_loc_path file (id,dl) = type_module file env loc path (id,dl) in
         List.fold_left type_module_env_loc_path file m_or_t

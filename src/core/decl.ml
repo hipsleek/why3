@@ -58,16 +58,16 @@ let make_ls_defn ls vl t =
   (* return the definition *)
   ls, (ls, fd, [])
 
-let open_ls_defn (_,f,_) =
-  let vl,_,f = match f.t_node with
-    | Tquant (Tforall,b) -> t_open_quant b
+let open_ls_defn (_, f, _ : ls_defn) =
+  let vl, _, f = match f.t_node with
+    | Tquant (Tforall, b) -> t_open_quant b
     | _ -> [],[],f in
   match f.t_node with
     | Tapp (_, [_; f])
-    | Tbinop (_, _, f) -> vl,f
+    | Tbinop (_, _, f) -> vl, f
     | _ -> assert false
 
-let open_ls_defn_cb ld =
+let open_ls_defn_cb (ld : ls_defn) =
   let ls,_,_ = ld in
   let vl,t = open_ls_defn ld in
   let close ls' vl' t' =
@@ -76,11 +76,11 @@ let open_ls_defn_cb ld =
   in
   vl,t,close
 
-let ls_defn_decrease (_,_,l) = l
+let ls_defn_decrease (_, _, l : ls_defn) = l
 
-let ls_defn_axiom (_,f,_) = f
+let ls_defn_axiom (_, f, _ : ls_defn) = f
 
-let ls_defn_of_axiom f =
+let ls_defn_of_axiom f : lsymbol * ls_defn =
   let _,_,f = match f.t_node with
     | Tquant (Tforall,b) -> t_open_quant b
     | _ -> [],[],f in
@@ -240,7 +240,7 @@ let build_call_list cgr id =
   in
   add_call [] (Hid.find_all cgr id)
 
-let find_variant exn cgr id =
+let find_variant exn cgr (id : ident) : int list =
   let cl = build_call_list cgr id in
   let add d1 d2 = match d1, d2 with
     | Unknown, _ -> d1
@@ -271,7 +271,7 @@ let find_variant exn cgr id =
 
 exception NoTerminationProof of lsymbol
 
-let check_termination ldl =
+let check_termination (ldl : (lsymbol * ls_defn) list) : (lsymbol * ls_defn) list =
   let cgr = create_call_set () in
   let add acc (ls,ld) = Mls.add ls (open_ls_defn ld) acc in
   let syms = List.fold_left add Mls.empty ldl in
@@ -839,12 +839,12 @@ let known_add_decl kn d =
 
 exception EmptyRecord
 
-let parse_record kn fll =
+let parse_record (kn : known_map) fll =
   let fs = match fll with
     | [] -> raise EmptyRecord
-    | (fs,_)::_ -> fs in
+    | (fs, _)::_ -> fs in
   let ts = match fs.ls_args with
-    | [{ ty_node = Tyapp (ts,_) }] -> ts
+    | [{ ty_node = Tyapp (ts, _) }] -> ts
     | _ -> raise (BadRecordField fs) in
   let cs, pjl = match find_constructors kn ts with
     | [cs,pjl] -> cs, List.map (Opt.get_exn (BadRecordUnnamed (fs, ts))) pjl
