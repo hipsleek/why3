@@ -41,9 +41,6 @@ let debug_print_original_model = Debug.register_info_flag "print-original-model"
 let debug_print_derived_model = Debug.register_info_flag "print-derived-model"
     ~desc:"Print derived counterexample model when --check-ce"
 
-let debug_trace_why3prove = Debug.register_info_flag "trace-why3prove"
-    ~desc:"Trace the execution of code in src/tools/why3prove.ml"
-
 (* Add a new file into the queue to be processed later *)
 let add_opt_file x =
   (* theory list *)
@@ -561,9 +558,7 @@ let () =
     let load (d,f,ef) = Driver.load_driver_file_and_extras main env ~extra_dir:d f ef in
     let drv = Option.map load !opt_driver in
     (* Print here *)
-    Debug.dprintf debug_trace_why3prove "(): driver loaded@.";
     Queue.iter (do_input main env drv) opt_queue;
-    Debug.dprintf debug_trace_why3prove "(): do_input finished@.";
     if !unproved then exit 2
   with e when not (Debug.test_flag Debug.stack_trace) ->
     eprintf "%a@." Exn_printer.exn_printer e;
