@@ -27,8 +27,11 @@ open Pmodule
 let debug_parse_only = Debug.register_flag "parse_only"
   ~desc:"Stop@ after@ parsing."
 
-let debug_type_only  = Debug.register_flag "type_only"
+let debug_type_only = Debug.register_flag "type_only"
   ~desc:"Stop@ after@ type-checking."
+
+let debug_vc_only = Debug.register_flag "vc_only"
+  ~desc:"Stop@ after@ VC@ generation."
 
 let warn_useless_at = Loc.register_warning "useless_at"
   "Warn about `at'/`old' operators used in locations where they have no impact."

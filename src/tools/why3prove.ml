@@ -177,6 +177,8 @@ let option_list =
       "parse_only" (KLong "parse-only") " stop after parsing";
     Debug.Args.desc_shortcut
       "type_only" (KLong "type-only") " stop after type checking";
+    Debug.Args.desc_shortcut
+      "vc_only" (KLong "vc-only") " stop after VC generation";
     Termcode.opt_extra_expl_prefix;
     KLong "check-ce", Hnd0 (fun () -> opt_check_ce_model := true),
     " check counterexamples using runtime assertion checking\n\
@@ -518,7 +520,8 @@ let do_local_theory config env drv fname m (tname,_,t,glist,elist) =
   do_theory config env drv fname tname th glist elist
 
 let do_input config env drv = function
-  | None, _ when Debug.test_flag Typing.debug_type_only ||
+  | None, _ when Debug.test_flag Typing.debug_vc_only ||
+                 Debug.test_flag Typing.debug_type_only ||
                  Debug.test_flag Typing.debug_parse_only ->
       ()
   | None, tlist ->
@@ -534,7 +537,9 @@ let do_input config env drv = function
               Env.read_file Env.base_language ?format env fname in
             (fname, mlw_files)
       in
-      if Debug.test_flag Typing.debug_type_only then ()
+      if Debug.test_flag Typing.debug_type_only ||
+         Debug.test_flag Typing.debug_vc_only
+      then ()
       else
         if Queue.is_empty tlist then
           let glist = Queue.create () in

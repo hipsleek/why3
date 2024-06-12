@@ -4,6 +4,31 @@ open Format
 open Why3
 open Wstdlib
 
+let usage_msg = "<file>\nParse and type check the given file, then display the AST"
+let opt_margin = ref 120
+let opt_unfold_region = ref false
+let opt_unfold_term_node = ref false
+let opt_unfold_expr_node = ref false
+let opt_file = ref None
+
+let add_opt_file file = opt_file := Some file
+
+let option_list =
+  let open Getopt in
+  [ KLong "margin", Hnd1 (AInt, fun i -> opt_margin := i),
+    "<characters> set the print margin";
+    KLong "unfold-region", Hnd0 (fun () -> opt_unfold_region := true),
+    "unfold the body of `region`";
+    KLong "unfold-term-node", Hnd0 (fun () -> opt_unfold_term_node := true),
+    "unfold the body of `term_node`";
+    KLong "unfold-expr-node", Hnd0 (fun () -> opt_unfold_expr_node := true),
+    "unfold the body of `expr_node`";
+  ]
+
+let config, env =
+  eprintf "why3inspect.ml: initialize args@.";
+  Whyconf.Args.initialize option_list add_opt_file usage_msg
+
 let print_string : string Pp.pp =
   fun fmt s -> fprintf fmt "\"%a\"" Pp.print_string s
 
@@ -22,9 +47,9 @@ and print_option : 'a Pp.pp -> 'a option Pp.pp =
     (Pp.print_option printer) o
 
 and print_binding : 'a Pp.pp -> 'b Pp.pp -> ('a * 'b) Pp.pp =
-  fun printer_a printer_b fmt (a, b) -> fprintf fmt "(%a@ =>@ %a)"
-    printer_a a
-    printer_b b
+  fun a_printer b_printer fmt (a, b) -> fprintf fmt "(%a@ =>@ %a)"
+    a_printer a
+    b_printer b
 
 let rec print_pmodule : Pmodule.pmodule Pp.pp =
   fun fmt m ->
@@ -113,10 +138,52 @@ and print_expr : Expr.expr Pp.pp =
       print_effect e.Expr.e_effect
       (print_list print_attribute) (Ident.Sattr.elements e.Expr.e_attrs)
 
+and print_expr_node_unfold : Expr.expr_node Pp.pp =
+  fun fmt en -> match en with
+    | Expr.Evar pv -> fprintf fmt "@[<hov 2>Evar(%a)@]"
+        print_pvsymbol pv
+    | Expr.Econst c -> fprintf fmt "@[<hov 2>Econst(%a)@]"
+        Constant.print_def c
+    | Expr.Eexec (ce, cty) -> fprintf fmt "@[<hov 2>Eexec(%a, %a)@]"
+        print_cexp ce
+        print_cty cty
+    | Expr.Eassign asgl -> fprintf fmt "@[<hov 2>Eassign(%a)@]"
+        (print_list print_assign) asgl
+    | Expr.Elet (ld, e) -> fprintf fmt "@[<hov 2>Elet(%a,@ %a)@]"
+        print_let_defn ld
+        print_expr e
+    | Expr.Eif (e_cond, e_if, e_else) -> fprintf fmt "@[<hov 2>Eif(%a,@ %a,@ %a)@]"
+        print_expr e_cond
+        print_expr e_if
+        print_expr e_else
+    | Expr.Ematch (e, rbl, ebm) -> fprintf fmt "@[<hov 2>Ematch(%a,@ %a,@ %a)@]"
+        print_expr e
+        (print_list print_reg_branch) rbl
+        (print_list (print_binding print_xsymbol print_exn_branch)) (Ity.Mxs.bindings ebm)
+    | Expr.Ewhile (e_cond, invl, varl, e_body) -> assert false
+    | Expr.Efor (pv0, bounds, pv1, invl, e) -> assert false
+    | Expr.Eraise (xs, e) -> fprintf fmt "@[<hov 2>Eraise(%a,@ %a)@]"
+        print_xsymbol xs
+        print_expr e
+    | Expr.Eexn (xs, e) -> fprintf fmt "@[<hov 2>Eexn(%a,@ %a)@]"
+        print_xsymbol xs
+        print_expr e
+    | Expr.Eassert (ak, t) -> fprintf fmt "@[<hov 2>Eassert(%a,@ %a)@]"
+        print_assertion_kind ak
+        print_term t
+    | Expr.Eghost e -> fprintf fmt "@[<hov 2>Eghost(%a)@]"
+        print_expr e
+    | Expr.Epure t -> fprintf fmt "@[<hov 2>Epure(%a)@]"
+        print_term t
+    | Expr.Eabsurd -> fprintf fmt "@[<hov 2>Eabsurd@]"
+
+and print_expr_node_fold : Expr.expr_node Pp.pp =
+  fun fmt _ ->
+    fprintf fmt "@[<hov 2>expr_node(...)@]"
+
 and print_expr_node : Expr.expr_node Pp.pp =
   fun fmt en ->
-    ignore en;
-    fprintf fmt "@[<hov 2>(expr_node)@]" (* TODO *)
+    (if !opt_unfold_expr_node then print_expr_node_unfold else print_expr_node_fold) fmt en
 
 and print_cexp : Expr.cexp Pp.pp =
   fun fmt ce ->
@@ -137,19 +204,43 @@ and print_cexp_node : Expr.cexp_node Pp.pp =
     | Expr.Cany -> fprintf fmt "@[<hov 2>Cany@]"
 
 and print_assign : Expr.assign Pp.pp =
-  fun fmt a ->
-    ignore a;
-    fprintf fmt "@[<hov 2>(assign)@]" (* TODO *)
+  fun fmt asg ->
+    let (pv_reg, rs_field, pv_val) = asg in
+    fprintf fmt "@[<hov 2>assign(%a,@ %a,@ %a)@]"
+      print_pvsymbol pv_reg
+      print_rsymbol rs_field
+      print_pvsymbol pv_val
 
 and print_reg_branch : Expr.reg_branch Pp.pp =
   fun fmt rb ->
-    ignore rb;
     fprintf fmt "@[<hov 2>(reg_branch)@]" (* TODO *)
 
 and print_exn_branch : Expr.exn_branch Pp.pp =
   fun fmt eb ->
-    ignore eb;
-    fprintf fmt "@[<hov 2>(exn_branch)@]" (* TODO *)
+    let (pvl, e) = eb in
+    fprintf fmt "@[<hov 2>exn_branch(%a,@ %a)@]"
+      (print_list print_pvsymbol) pvl
+      print_expr e
+
+and print_assertion_kind : Expr.assertion_kind Pp.pp =
+  fun fmt ak -> match ak with
+    | Expr.Assert -> fprintf fmt "@[<hov 2>Assert@]"
+    | Expr.Assume -> fprintf fmt "@[<hov 2>Assume@]"
+    | Expr.Check -> fprintf fmt "@[<hov 2>Check@]"
+
+and print_prog_pattern : Expr.prog_pattern Pp.pp =
+  fun fmt p ->
+    fprintf fmt "[@<hov 2>prog_pattern{pp_pat=%a,@ pp_ity=%a,@ pp_mask=%a,@ pp_fail=%a}@]"
+      print_pattern p.Expr.pp_pat
+      print_ity p.Expr.pp_ity
+      print_mask p.Expr.pp_mask
+      print_pat_ghost p.Expr.pp_fail
+
+and print_pat_ghost : Expr.pat_ghost Pp.pp =
+  fun fmt pg -> match pg with
+    | Expr.PGfail -> fprintf fmt "@[<hov 2>PGfail@]"
+    | Expr.PGlast -> fprintf fmt "@[<hov 2>PGlast@]"
+    | Expr.PGnone -> fprintf fmt "@[<hov 2>PGnone@]"
 
 and print_invariant : Expr.invariant Pp.pp =
   fun fmt iv ->
@@ -169,6 +260,9 @@ and print_variant : Expr.variant Pp.pp =
     fprintf fmt "@[<hov 2>variant(%a,@ %a)@]"
       print_term t
       (print_option print_lsymbol) ls_opt
+
+and print_pattern : Term.pattern Pp.pp =
+  fun fmt p -> ()
 
 and print_decl : Decl.decl Pp.pp =
   fun fmt d ->
@@ -198,12 +292,41 @@ and print_rsymbol : Expr.rsymbol Pp.pp =
 
 and print_itysymbol : Ity.itysymbol Pp.pp =
   fun fmt its ->
-    fprintf fmt "@[<hov2>itysymbol{its_ts=%a,@ its_nonfree=%a,@ its_private=%a,@ its_mutable=%a,@ its_fragile=%a}@]"
+    fprintf fmt "@[<hov2>itysymbol{its_ts=%a,@ its_nonfree=%a,@ its_private=%a,@ its_mutable=%a,@ \
+      its_fragile=%a,@ its_mfields=%a,@ its_ofields=%a,@ its_regions=%a,@ its_def=%a}@]"
       print_tysymbol its.Ity.its_ts
       print_bool its.Ity.its_nonfree
       print_bool its.Ity.its_private
       print_bool its.Ity.its_mutable
       print_bool its.Ity.its_fragile
+      (print_list print_pvsymbol) its.Ity.its_mfields
+      (print_list print_pvsymbol) its.Ity.its_ofields
+      (print_list print_region) its.Ity.its_regions
+      (print_type_def print_ity) its.Ity.its_def
+
+and print_region_unfold : Ity.region Pp.pp =
+  fun fmt reg ->
+    fprintf fmt "@[<hov 2>region{reg_name=%a,@ reg_its=%a,@ reg_args=%a,@ reg_regs=%a}@]"
+      print_ident reg.Ity.reg_name
+      print_itysymbol reg.Ity.reg_its
+      (print_list print_ity) reg.Ity.reg_args
+      (print_list print_ity) reg.Ity.reg_regs
+
+and print_region_fold : Ity.region Pp.pp =
+  fun fmt _ ->
+    fprintf fmt "@[<hov 2>region{...}@]"
+
+and print_region : Ity.region Pp.pp =
+  fun fmt reg ->
+    (if !opt_unfold_region then print_region_unfold else print_region_fold) fmt reg
+
+and print_type_def : 'a Pp.pp -> 'a Ty.type_def Pp.pp =
+  fun printer fmt def -> match def with
+    | Ty.NoDef -> fprintf fmt "@[<hov 2>NoDef@]"
+    | Ty.Alias a -> fprintf fmt "@[<hov 2>Alias(%a)@]"
+        printer a
+    | Ty.Range _ -> assert false
+    | Ty.Float _ -> assert false
 
 and print_tysymbol : Ty.tysymbol Pp.pp =
   fun fmt ts ->
@@ -223,9 +346,15 @@ and print_ity : Ity.ity Pp.pp =
       print_bool ity.Ity.ity_pure
 
 and print_ity_node : Ity.ity_node Pp.pp =
-  fun fmt ityn ->
-    ignore ityn;
-    fprintf fmt "@[<hov 2>(ity_node)@]" (* TODO *)
+  fun fmt ityn -> match ityn with
+    | Ity.Ityreg reg -> fprintf fmt "@[<hov 2>Ityreg(%a)@]"
+        print_region reg
+    | Ity.Ityapp (its, ityl0, ityl1) -> fprintf fmt "@[<hov 2>Ityapp(%a,@ %a,@ %a)@]"
+        print_itysymbol its
+        (print_list print_ity) ityl0
+        (print_list print_ity) ityl1
+    | Ity.Ityvar tv -> fprintf fmt "@[<hov 2>Ityvar(%a)@]"
+        print_tvsymbol tv
 
 and print_cty : Ity.cty Pp.pp =
   fun fmt cty ->
@@ -306,14 +435,35 @@ and print_ty_node : Ty.ty_node Pp.pp =
         (print_list print_ty) tyl
 
 and print_mask : Ity.mask Pp.pp =
-  fun fmt mask ->
-    ignore mask;
-    fprintf fmt "@[<hov 2>(mask)@]"
+  fun fmt mask -> match mask with
+    | Ity.MaskVisible -> fprintf fmt "@[<hov 2>MaskVisible@]"
+    | Ity.MaskTuple ml -> fprintf fmt "@[<hov 2>MaskTuple(%a)@]"
+        (print_list print_mask) ml
+    | Ity.MaskGhost -> fprintf fmt "@[<hov 2>MaskGhost@]"
 
 and print_effect : Ity.effect Pp.pp =
   fun fmt eff ->
-    ignore eff;
-    fprintf fmt "@[<hov 2>(effect)@]"
+    let eff_writes_printer = print_list (print_binding print_region (print_list print_pvsymbol)) in
+    let eff_writes = List.map
+      (fun (reg, pvss) -> reg, Ity.Spv.elements pvss)
+      (Ity.Mreg.bindings eff.Ity.eff_writes) in
+    fprintf fmt "@[<hov 2>effect{eff_reads=%a,@ eff_writes=%a,@ eff_taints=%a,@ eff_covers=%a,@ eff_resets=%a,@ \
+      eff_raises=%a,@ eff_spoils=%a,@ eff_oneway=%a,@ eff_ghost=%a}@]"
+      (print_list print_pvsymbol) (Ity.Spv.elements eff.Ity.eff_reads)
+      eff_writes_printer eff_writes
+      (print_list print_region) (Ity.Sreg.elements eff.Ity.eff_taints)
+      (print_list print_region) (Ity.Sreg.elements eff.Ity.eff_covers)
+      (print_list print_region) (Ity.Sreg.elements eff.Ity.eff_resets)
+      (print_list print_xsymbol) (Ity.Sxs.elements eff.Ity.eff_raises)
+      (print_list print_tvsymbol) (Ty.Stv.elements eff.Ity.eff_spoils)
+      print_oneway eff.Ity.eff_oneway
+      print_bool eff.Ity.eff_ghost
+
+and print_oneway : Ity.oneway Pp.pp =
+  fun fmt ow -> match ow with
+    | Ity.Total -> fprintf fmt "@[<hov 2>Total@]"
+    | Ity.Partial -> fprintf fmt "@[<hov 2>Partial@]"
+    | Ity.Diverges -> fprintf fmt "@[<hov 2>Diverges@]"
 
 and print_theory : Theory.theory Pp.pp =
   fun fmt th ->
@@ -324,9 +474,8 @@ and print_theory : Theory.theory Pp.pp =
 
 and print_tdecl : Theory.tdecl Pp.pp =
   fun fmt td ->
-    fprintf fmt "@[<hov 2>tdecl{td_node=%a,@ td_tag=%a}@]"
+    fprintf fmt "@[<hov 2>tdecl{td_node=%a}@]"
       print_tdecl_node td.Theory.td_node
-      print_int td.Theory.td_tag
 
 and print_tdecl_node : Theory.tdecl_node Pp.pp =
   fun fmt tdn ->
@@ -350,20 +499,6 @@ and print_meta_decl : Pdecl.meta_decl Pp.pp =
     ignore md;
     fprintf fmt "@[<hov 2>meta_decl(...)@]"
 
-let usage_msg =
-  "<file>\n\
-  Parse and type check the given file, then display the AST"
-
-let option_list = []
-
-let opt_file = ref None
-
-let add_opt_file file = opt_file := Some file
-
-let config, env =
-  eprintf "why3inspect.ml: initialize args@.";
-  Whyconf.Args.initialize option_list add_opt_file usage_msg
-
 let handle_no_file () =
   Whyconf.Args.exit_with_usage usage_msg
 
@@ -375,6 +510,7 @@ let handle_file file =
 
 let () =
   eprintf "why3inspect.ml: handle input file@.";
+  Format.set_margin !opt_margin;
   try
     match !opt_file with
       | None -> handle_no_file ()
