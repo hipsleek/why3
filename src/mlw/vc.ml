@@ -23,6 +23,9 @@ open Pdecl
 let debug_vc = Debug.register_info_flag "vc_debug"
   ~desc:"Print@ details@ of@ verification@ conditions@ generation."
 
+let debug_vc_extra = Debug.register_info_flag "vc_debug_extra"
+  ~desc:"Print@ extra@ details@ of@ verification@ conditions@ generation."
+
 let debug_reflow = Debug.register_info_flag "vc_reflow"
   ~desc:"Debug@ elimination@ of@ the@ dead@ code@ in@ VC."
 
@@ -706,7 +709,7 @@ let rec k_expr
         let p, (oldies, sbs) = match pre with
           (* p : term *)
           (* oldies : pvsymbol Mpv.t (mapping from current pv to old pv)? *)
-          (* sbs : term Mpv.t (substitution)? *)
+          (* sbs : term Mvs.t (substitution)? *)
           (* for recursive calls, compute the 'variant decrease'
              precondition and rename the oldies to avoid clash *)
           | {t_node = Tapp (ls, tl)} :: pl when Mls.mem ls lps ->
@@ -754,24 +757,29 @@ let rec k_expr
                 Kval ([v], List.fold_right sp_and rinv sp) in
           if env.keep_trace && need_trace then
             let vv = explicit_result loc ce v.pv_ity e.e_id in
-            Kseq(k v,0,Klet(vv, t_var v.pv_vs, t_true))
+            Kseq(k v, 0, Klet(vv, t_var v.pv_vs, t_true))
           else
             k v
           in
-        let k = k_of_post expl_post res cty.cty_post in
+        let k : kode = k_of_post expl_post res cty.cty_post in
         (* in abstract blocks, exceptions without postconditions
            escape from the block into the outer code. Otherwise,
            every exception in eff_raises is an alternative block
            with the xpost assumed and the exception raised. *)
         let skip = match ce.c_node with
-          | Cfun _ -> xmap | _ -> Mxs.empty in
-        let xq = complete_xpost cty eff skip in
-        let k = Mxs.fold2_inter (fun _ ql (i,v) k ->
+          | Cfun _ -> xmap
+          | _ -> Mxs.empty in
+        let xq : term list Mxs.t = complete_xpost cty eff skip in
+        let k : kode = Mxs.fold2_inter (fun _ ql (i,v) k ->
           let xk = k_of_post expl_xpost v ql in
           Kpar(k, Kseq (xk, 0, Kcont i))) xq xmap k in
-        let k = List.fold_right assume_inv qinv k in
+        let k : kode = List.fold_right assume_inv qinv k in
+        if Debug.test_flag debug_vc_extra then
+          Format.eprintf "Exec#2 @[%a@]@\n" k_print k;
         (* oldies and havoc are common for all outcomes *)
         let k = bind_oldies oldies (k_havoc loc attrs eff k) in
+        if Debug.test_flag debug_vc_extra then
+          Format.eprintf "Exec#2 @[%a@]@\n" k_print k;
         (* ignore divergence here if we check it later *)
         let k = match ce.c_node with
           | Cfun e when not (Sattr.mem nt_attr e.e_attrs) -> k
@@ -781,6 +789,8 @@ let rec k_expr
             then Kseq (Kcut p, 0, k)
             else Kpar (Kstop p, k) in
         let k = List.fold_right assert_inv pinv k in
+        if Debug.test_flag debug_vc_extra then
+          Format.eprintf "Exec#2 @[%a@]@\n" k_print k;
         begin match ce.c_node with
           | Cfun e -> Kpar (k_fun env lps ~xmap ce.c_cty e, k)
           | _ -> k
@@ -1057,8 +1067,8 @@ let rec k_expr
 
 and k_fun (env : vc_env) (lps : (variant list * lsymbol option list) Mls.t) ?(oldies=Mpv.empty) ?(xmap=Mxs.empty) cty e =
   (* ASSUME pre ; LET o = arg ; TRY e ; STOP post WITH STOP xpost *)
-  if Debug.test_flag debug_vc then
-    Format.eprintf "<kfun> @[<hov 2>%a@]@\n" print_expr e;
+  if Debug.test_flag debug_vc_extra then
+    Format.eprintf "<kfun> @[%a@]@\n" print_expr e;
   let (res, q : pvsymbol * term) = wp_of_post expl_post e.e_loc cty.cty_result cty.cty_post in
   let xq : term list Mxs.t = complete_xpost cty e.e_effect xmap in
   let xq : ((int * pvsymbol) * term) Mxs.t = Mxs.mapi (fun xs ql ->
@@ -1080,15 +1090,19 @@ and k_fun (env : vc_env) (lps : (variant list * lsymbol option list) Mls.t) ?(ol
     List.fold_right assert_inv qinv k in
   (* do not check termination if asked nicely *)
   let env = if Sattr.mem nt_attr e.e_attrs then { env with divergent = true } else env in
+  (* generate the k_expr for the body *)
   let k = k_expr env lps e res xmap in
+  (* append to the body the final post condition: "STOP" *)
   let k = Kseq (k, 0, add_qinv res q) in
-  let k = Mxs.fold (fun _ ((i,r), xq) k ->
-    Kseq (k, i, add_qinv r xq)) xq k in
+  (* handle exception *)
+  let k = Mxs.fold (fun _ ((i, r), xq) k -> Kseq (k, i, add_qinv r xq)) xq k in
   (* move the postconditions under the VCgen tag *)
   let k = if Sattr.mem sp_attr e.e_attrs then Ktag (SP, k) else
           if Sattr.mem wp_attr e.e_attrs then Ktag (WP, k) else k in
   let k = bind_oldies oldies (bind_oldies cty.cty_oldies k) in
-  let p = List.fold_right sp_and pinv (sp_of_pre cty.cty_pre) in
+  (* the precondition *)
+  let p : term = List.fold_right sp_and pinv (sp_of_pre cty.cty_pre) in
+  (* prepend the precondition into the kode of the body *)
   Kseq (Kval (cty.cty_args, p), 0, k)
 
 and k_rec envs lps rdl =
