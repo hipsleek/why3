@@ -217,8 +217,8 @@ rule token = parse
 
 {
 
-  let debug = Debug.register_info_flag "print_modules"
-    ~desc:"Print@ program@ modules@ after@ typechecking."
+  let debug = Debug.register_info_flag "print_sleek_modules"
+    ~desc:"Print@ program@ modules@ @with @Sleek@ spec@ after@ typechecking."
 
   exception Error of string option
 
@@ -232,7 +232,7 @@ rule token = parse
   let build_parsing_function (parser_entry: Lexing.position -> 'a) lb =
     (* This records the last token which was read (for error messages) *)
     let last = ref EOF in
-    let module I = Parser.MenhirInterpreter in
+    let module I = Parser_sleek.MenhirInterpreter in
     let checkpoint = parser_entry lb.Lexing.lex_curr_p
     and supplier =
       I.lexer_lexbuf_to_supplier (fun x -> let t = token x in last := t; t) lb
@@ -257,22 +257,22 @@ rule token = parse
   open Pmodule
 
   let parse_term lb =
-    build_parsing_function Parser.Incremental.term_eof lb
+    build_parsing_function Parser_sleek.Incremental.term_eof lb
 
   let parse_expr lb =
-    build_parsing_function Parser.Incremental.expr_eof lb
+    build_parsing_function Parser_sleek.Incremental.expr_eof lb
 
-  let parse_decl lb = build_parsing_function Parser.Incremental.decl_eof lb
+  let parse_decl lb = build_parsing_function Parser_sleek.Incremental.decl_eof lb
 
-  let parse_term_list lb = build_parsing_function Parser.Incremental.term_comma_list_eof lb
+  let parse_term_list lb = build_parsing_function Parser_sleek.Incremental.term_comma_list_eof lb
 
-  let parse_qualid lb = build_parsing_function Parser.Incremental.qualid_eof lb
+  let parse_qualid lb = build_parsing_function Parser_sleek.Incremental.qualid_eof lb
 
-  let parse_list_ident lb = build_parsing_function Parser.Incremental.ident_comma_list_eof lb
+  let parse_list_ident lb = build_parsing_function Parser_sleek.Incremental.ident_comma_list_eof lb
 
-  let parse_list_qualid lb = build_parsing_function Parser.Incremental.qualid_comma_list_eof lb
+  let parse_list_qualid lb = build_parsing_function Parser_sleek.Incremental.qualid_comma_list_eof lb
 
-  let parse_mlw_file lb = build_parsing_function Parser.Incremental.mlw_file_parsing_only lb
+  let parse_mlw_file lb = build_parsing_function Parser_sleek.Incremental.mlw_file_parsing_only lb
 
   let read_channel env path file c =
     let lb = Lexing.from_channel c in
@@ -280,7 +280,7 @@ rule token = parse
     Typing.open_file env path;
     let mm =
       try
-        build_parsing_function Parser.Incremental.mlw_file lb
+        build_parsing_function Parser_sleek.Incremental.mlw_file lb
       with
         e -> ignore (Typing.discard_file ()); raise e
     in

@@ -17,7 +17,7 @@
 *)
 
 %{
-  open Pstree
+  open Ptree_sleek
 
   let floc s e = Loc.extract (s,e)
 
@@ -226,9 +226,9 @@
     let ifte = reduce_fun_lit add_term tl default in
     (* fun x -> if x ... *)
     let binder = (loc_begin, Some id_var, false, None) in
-    let desc = Ptree.Tquant (Dterm.DTlambda, [binder], [], ifte) in
+    let desc = Ptree_sleek.Tquant (Dterm.DTlambda, [binder], [], ifte) in
     let t = { term_desc = desc; term_loc = Loc.join loc_begin loc_end } in
-    Ptree.Tattr (Ptree.ATstr Ident.funlit, t)
+    Ptree_sleek.Tattr (Ptree_sleek.ATstr Ident.funlit, t)
 
   (* if el = [] then default <> None *)
   let expr_fun_lit loc_begin loc_end (el,default) =
@@ -258,12 +258,12 @@
         expr_loc = Loc.join e1.expr_loc e.expr_loc } in
     let ifte = reduce_fun_lit add_expr el_proxies default_proxy in
     let binder = (loc_begin, Some fun_id_var, false, None) in
-    let pattern = { pat_desc = Ptree.Pvar fun_id_var;
+    let pattern = { pat_desc = Ptree_sleek.Pvar fun_id_var;
                     pat_loc = loc_begin } in
     let spec = { sp_pre = []; sp_post = []; sp_xpost = []; sp_reads = [];
                  sp_writes = []; sp_alias = []; sp_variant = [];
                  sp_checkrw = false; sp_diverge = false; sp_partial = false } in
-    let efun = Ptree.Efun ([binder], None, pattern, Ity.MaskVisible, spec, ifte) in
+    let efun = Ptree_sleek.Efun ([binder], None, pattern, Ity.MaskVisible, spec, ifte) in
     let efun = { expr_desc = efun; expr_loc = lit_loc } in
     (* let d1 = e1 in
        let r1 = e2 in
@@ -284,7 +284,7 @@
          {expr_desc; expr_loc = lit_loc}
       | _ -> elets
     in
-    Ptree.Eattr (Ptree.ATstr Ident.funlit, e)
+    Ptree_sleek.Eattr (Ptree_sleek.ATstr Ident.funlit, e)
 
 %}
 
@@ -459,7 +459,7 @@ meta_arg:
 | PREDICATE predicate_decl with_logic_decl* { Dlogic ($2::$3) }
 | INDUCTIVE   with_list1(inductive_decl)    { Dind (Decl.Ind, $2) }
 | COINDUCTIVE with_list1(inductive_decl)    { Dind (Decl.Coind, $2) }
-| AXIOM attrs(ident_nq) COLON term          { Dprop (Decl.Paxiom, { $2 with id_ats = (Ptree.ATstr Ident.useraxiom_attr)::$2.id_ats; }, $4) }
+| AXIOM attrs(ident_nq) COLON term          { Dprop (Decl.Paxiom, { $2 with id_ats = (Ptree_sleek.ATstr Ident.useraxiom_attr)::$2.id_ats; }, $4) }
 | LEMMA attrs(ident_nq) COLON term          { Dprop (Decl.Plemma, $2, $4) }
 | GOAL  attrs(ident_nq) COLON term          { Dprop (Decl.Pgoal, $2, $4) }
 
