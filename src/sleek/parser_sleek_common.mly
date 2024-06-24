@@ -922,12 +922,13 @@ kind:
 (* Function definitions *)
 
 rec_defn:
-| ghost kind attrs(lident_rich) binders return_opt spec EQUAL spec seq_expr
-    { let pat, ty, mask = $5 in
-      let spec = apply_return pat (spec_union $6 $8) in
-      let id = mk_id return_id $startpos($7) $endpos($7) in
-      let e = { $9 with expr_desc = Eoptexn (id, mask, $9) } in
-      $3, ghost $1, $2, $4, ty, pat, mask, apply_partial_sp $1 spec, e }
+| sleek_spec ghost kind attrs(lident_rich) binders return_opt spec EQUAL spec seq_expr
+    { let pat, ty, mask = $6 in
+      let spec = apply_return pat (spec_union $7 $9) in
+      let id = mk_id return_id $startpos($8) $endpos($8) in
+      let e = { $10 with expr_desc = Eoptexn (id, mask, $10) } in
+      let sleek_spec = $1 in
+      $4, ghost $2, $3, $5, ty, pat, mask, apply_partial_sp $2 spec, sleek_spec, e }
 
 fun_defn:
 | sleek_spec binders return_opt spec EQUAL spec seq_expr
