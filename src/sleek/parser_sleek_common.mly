@@ -43,7 +43,7 @@
     | [], _ -> v2
     | _, ({term_loc = loc},_)::_ -> Loc.errorm ~loc
         "multiple `variant' clauses are not allowed"
-        
+
   let empty_sleek_spec = ""
 
   let empty_spec = {
@@ -99,8 +99,8 @@
   let apply_partial part e =
     if part <> Partial then e else
     let ed = match e.expr_desc with
-      | Efun (_::_ as bl, op, p, m, s, ex) ->
-          Efun (bl, op, p, m, apply_partial_sp part s, ex)
+      | Efun (_::_ as bl, op, p, m, s, ss, ex) ->
+          Efun (bl, op, p, m, apply_partial_sp part s, ss, ex)
       | Eany (_::_ as pl, rsk, op, p,  m, s) ->
           Eany (pl, rsk, op, p, m, apply_partial_sp part s)
       | _ ->
@@ -260,10 +260,9 @@
     let binder = (loc_begin, Some fun_id_var, false, None) in
     let pattern = { pat_desc = Ptree_sleek.Pvar fun_id_var;
                     pat_loc = loc_begin } in
-    let spec = { sp_pre = []; sp_post = []; sp_xpost = []; sp_reads = [];
-                 sp_writes = []; sp_alias = []; sp_variant = [];
-                 sp_checkrw = false; sp_diverge = false; sp_partial = false } in
-    let efun = Ptree_sleek.Efun ([binder], None, pattern, Ity.MaskVisible, spec, ifte) in
+    let spec = empty_spec in
+    let sleek_spec = empty_sleek_spec in
+    let efun = Ptree_sleek.Efun ([binder], None, pattern, Ity.MaskVisible, spec, sleek_spec, ifte) in
     let efun = { expr_desc = efun; expr_loc = lit_loc } in
     (* let d1 = e1 in
        let r1 = e2 in
@@ -301,6 +300,10 @@
 %token <string> RIGHTSQ_QUOTE (* ]'' *)
 %token <string> RIGHTPAR_QUOTE (* )'spec *)
 %token <string> RIGHTPAR_USCORE (* )_spec *)
+
+(* sleek spec *)
+
+%token <string> SLEEK_SPEC
 
 (* keywords *)
 
@@ -927,12 +930,13 @@ rec_defn:
       $3, ghost $1, $2, $4, ty, pat, mask, apply_partial_sp $1 spec, e }
 
 fun_defn:
-| binders return_opt spec EQUAL spec seq_expr
-    { let pat, ty, mask = $2 in
-      let spec = apply_return pat (spec_union $3 $5) in
-      let id = mk_id return_id $startpos($4) $endpos($4) in
-      let e = { $6 with expr_desc = Eoptexn (id, mask, $6) } in
-      Efun ($1, ty, pat, mask, spec, e) }
+| sleek_spec binders return_opt spec EQUAL spec seq_expr
+    { let pat, ty, mask = $3 in
+      let spec = apply_return pat (spec_union $4 $6) in
+      let id = mk_id return_id $startpos($5) $endpos($5) in
+      let e = { $7 with expr_desc = Eoptexn (id, mask, $7) } in
+      let sleek_spec = $1 in
+      Efun ($2, ty, pat, mask, spec, sleek_spec, e) }
 
 fun_decl:
 | params1 return_opt spec
@@ -958,11 +962,11 @@ mk_expr(X): d = X { mk_expr d $startpos $endpos }
 | contract_expr SEMICOLON seq_expr
     { mk_expr (Esequence ($1, $3)) $startpos $endpos }
 
-%public contract_expr:
+%public contract_expr: (* TODO: do we need to augment this rule with sleek spec? *)
 | assign_expr %prec prec_no_spec  { $1 }
 | assign_expr single_spec spec
     { let p = mk_pat Pwild $startpos $endpos in
-      let d = Efun ([], None, p, Ity.MaskVisible, spec_union $2 $3, $1) in
+      let d = Efun ([], None, p, Ity.MaskVisible, spec_union $2 $3, empty_sleek_spec, $1) in
       let d = Eattr (ATstr Vc.wb_attr, mk_expr d $startpos $endpos) in
       mk_expr d $startpos $endpos }
 
@@ -1067,7 +1071,7 @@ single_expr_:
     { let id = mk_id return_id $startpos($4) $endpos($4) in
       let e = { $6 with expr_desc = Eoptexn (id, Ity.MaskVisible, $6) } in
       let p = mk_pat Pwild $startpos $endpos in
-      Efun ($2, None, p, Ity.MaskVisible, spec_union $3 $5, e) }
+      Efun ($2, None, p, Ity.MaskVisible, spec_union $3 $5, empty_sleek_spec, e) }
 | ANY return_named spec
     { let pat, ty, mask = $2 in
       let loc = floc $startpos $endpos in
@@ -1215,11 +1219,11 @@ expr_dot_:
 expr_block_:
 | BEGIN single_spec spec seq_expr END
     { let p = mk_pat Pwild $startpos $endpos in
-      Efun ([], None, p, Ity.MaskVisible, spec_union $2 $3, $4) }
+      Efun ([], None, p, Ity.MaskVisible, spec_union $2 $3, empty_sleek_spec, $4) }
 | BEGIN single_spec spec END
     { let e = mk_expr (Etuple []) $startpos $endpos in
       let p = mk_pat Pwild $startpos $endpos in
-      Efun ([], None, p, Ity.MaskVisible, spec_union $2 $3, e) }
+      Efun ([], None, p, Ity.MaskVisible, spec_union $2 $3, empty_sleek_spec, e) }
 | BEGIN seq_expr END                                { $2.expr_desc }
 | LEFTPAR seq_expr RIGHTPAR                         { $2.expr_desc }
 | BEGIN END                                         { Etuple [] }
@@ -1289,6 +1293,9 @@ for_dir:
 | DOWNTO  { Expr.DownTo }
 
 (* Specification *)
+
+sleek_spec:
+| (* TODO *)
 
 %public spec:
 | (* epsilon *) %prec prec_no_spec  { empty_spec }
