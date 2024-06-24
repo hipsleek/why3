@@ -10,7 +10,7 @@
 (********************************************************************)
 
 {
-  open Parser_tokens
+  open Parser_sleek_tokens
 
   let keywords = Hashtbl.create 97
   let () =
@@ -118,6 +118,13 @@ rule token = parse
       { REAL (Number.real_literal ~radix:16 ~neg:false ~int:i ~frac:f ~exp:(Option.map Lexlib.remove_leading_plus e)) }
   | "(*)"
       { Lexlib.backjump lexbuf 2; LEFTPAR }
+  | "(*sleek"
+      { let start_p = lexbuf.Lexing.lex_start_p in
+        let start_pos = lexbuf.Lexing.lex_start_pos in
+        let sleek_spec = Lexlib_sleek.sleek_spec lexbuf in
+        lexbuf.Lexing.lex_start_p <- start_p;
+        lexbuf.Lexing.lex_start_pos <- start_pos;
+        SLEEK_SPEC sleek_spec }
   | "(*"
       { Lexlib.comment lexbuf; token lexbuf }
   | "'" (lalpha suffix as id)
@@ -284,9 +291,9 @@ rule token = parse
     end;
     mm
 
-  let whyml_format = "whyml"
+  let whyml_sleek_format = "whyml_sleek"
 
-  let () = Env.register_format mlw_language whyml_format ["mlw";"why"]
-      read_channel ~desc:"WhyML@ programming@ and@ specification@ language"
+  let () = Env.register_format mlw_language whyml_format ["mlws"]
+      read_channel ~desc:"WhyML@ programming@ and@ specification@ language@ with@ Sleek"
 
 }
