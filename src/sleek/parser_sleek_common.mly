@@ -345,6 +345,12 @@
 %nonassoc LET VAL EXCEPTION
 %nonassoc prec_no_else
 %nonassoc DOT ELSE RETURN
+
+(* Sleek *)
+%nonassoc prec_no_sleek_spec
+%nonassoc SLEEK_SPEC
+(* Sleek *)
+
 %nonassoc prec_no_spec
 %nonassoc REQUIRES ENSURES RETURNS RAISES READS WRITES ALIAS DIVERGES VARIANT
 %nonassoc below_LARROW
@@ -1295,8 +1301,9 @@ for_dir:
 
 (* Specification *)
 
-sleek_spec:
-| (* TODO *)
+sleek_spec: (* TODO: change the representation of sleek spec *)
+| (* epsilon *) %prec prec_no_sleek_spec { empty_sleek_spec }
+| SLEEK_SPEC                             { $1 }
 
 %public spec:
 | (* epsilon *) %prec prec_no_spec  { empty_spec }
