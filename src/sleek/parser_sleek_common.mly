@@ -101,8 +101,8 @@
     let ed = match e.expr_desc with
       | Efun (_::_ as bl, op, p, m, s, ss, ex) ->
           Efun (bl, op, p, m, apply_partial_sp part s, ss, ex)
-      | Eany (_::_ as pl, rsk, op, p,  m, s) ->
-          Eany (pl, rsk, op, p, m, apply_partial_sp part s)
+      | Eany (_::_ as pl, rsk, op, p, m, s, ss) ->
+          Eany (pl, rsk, op, p, m, apply_partial_sp part s, ss)
       | _ ->
           Loc.errorm ~loc:e.expr_loc
             "this expression cannot be declared partial" in
@@ -939,14 +939,14 @@ fun_defn:
       Efun ($2, ty, pat, mask, spec, sleek_spec, e) }
 
 fun_decl:
-| params1 return_opt spec
-    { let pat, ty, mask = $2 in
-      Eany ($1, Expr.RKnone, ty, pat, mask, apply_return pat $3) }
+| sleek_spec params1 return_opt spec
+    { let pat, ty, mask = $3 in
+      Eany ($2, Expr.RKnone, ty, pat, mask, apply_return pat $4, $1) }
 
 const_decl:
-| return_opt spec
-    { let pat, ty, mask = $1 in
-      Eany ([], Expr.RKnone, ty, pat, mask, apply_return pat $2) }
+| sleek_spec return_opt spec
+    { let pat, ty, mask = $2 in
+      Eany ([], Expr.RKnone, ty, pat, mask, apply_return pat $3, $1) }
 
 const_defn:
 | cast EQUAL seq_expr   { { $3 with expr_desc = Ecast ($3, $1) } }
@@ -1087,7 +1087,7 @@ single_expr_:
       let pre = pre_of_any loc ty spec.sp_post in
       let spec = { spec with sp_pre = spec.sp_pre @ pre } in
       let p = mk_pat Pwild $startpos $endpos in
-      Eany ([], Expr.RKnone, Some ty, p, mask, spec) }
+      Eany ([], Expr.RKnone, Some ty, p, mask, spec, empty_sleek_spec) }
 | VAL ghost kind attrs(lident_rich) mk_expr(fun_decl) IN seq_expr
     { Elet ($4, ghost $2, $3, apply_partial $2 $5, $7) }
 | VAL ghost kind sym_binder mk_expr(const_decl) IN seq_expr
