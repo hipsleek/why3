@@ -16,15 +16,16 @@
 (* Entry points *)
 
 %start <Pmodule.pmodule Wstdlib.Mstr.t> mlw_file
-%start <Ptree.mlw_file> mlw_file_parsing_only
-%start <Ptree.term> term_eof
-%start <Ptree.expr> expr_eof
-%start <Ptree.decl> decl_eof
-%start <Ptree.qualid> qualid_eof
-%start <Ptree.qualid list> qualid_comma_list_eof
-%start <Ptree.term list> term_comma_list_eof
-%start <Ptree.ident list> ident_comma_list_eof
+%start <Ptree_sleek.mlw_file> mlw_file_parsing_only
+%start <Ptree_sleek.term> term_eof
+%start <Ptree_sleek.expr> expr_eof
+%start <Ptree_sleek.decl> decl_eof
+%start <Ptree_sleek.qualid> qualid_eof
+%start <Ptree_sleek.qualid list> qualid_comma_list_eof
+%start <Ptree_sleek.term list> term_comma_list_eof
+%start <Ptree_sleek.ident list> ident_comma_list_eof
 
+(* TODO: replace side effect of functions *)
 
 %%
 
@@ -141,12 +142,12 @@ module_decl_no_head_parsing_only:
 use_clone:
 | USE EXPORT tqualid
     { let loc = floc $startpos $endpos in
-      let decl = Ptree.Duseexport $3 in
+      let decl = Ptree_sleek.Duseexport $3 in
       Typing.add_decl loc decl
     }
 | CLONE EXPORT tqualid clone_subst
     { let loc = floc $startpos $endpos in
-      let decl = Ptree.Dcloneexport(loc,$3,$4) in
+      let decl = Ptree_sleek.Dcloneexport(loc,$3,$4) in
       Typing.add_decl loc decl
     }
 | USE boption(IMPORT) m_as_list = comma_list1(use_as)
@@ -155,7 +156,7 @@ use_clone:
       let import = $2 in
       if import && not exists_as then Loc.warning ~loc warn_redundant_import
         "the keyword `import' is redundant here and can be omitted";
-      let decl = Ptree.Duseimport(loc,import,m_as_list) in
+      let decl = Ptree_sleek.Duseimport(loc,import,m_as_list) in
       Typing.add_decl loc decl
     }
 | CLONE boption(IMPORT) tqualid option(preceded(AS, uident)) clone_subst
@@ -164,6 +165,6 @@ use_clone:
       let as_opt = $4 in
       if import && as_opt = None then Loc.warning ~loc warn_redundant_import
         "the keyword `import' is redundant here and can be omitted";
-      let decl = Ptree.Dcloneimport(loc,import,$3,as_opt,$5) in
+      let decl = Ptree_sleek.Dcloneimport(loc,import,$3,as_opt,$5) in
       Typing.add_decl loc decl
     }
