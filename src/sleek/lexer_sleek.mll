@@ -274,7 +274,7 @@ rule token = parse
 
   let parse_mlw_file lb = build_parsing_function Parser_sleek.Incremental.mlw_file_parsing_only lb
 
-  let read_channel env path file c =
+  (* let read_channel env path file c =
     let lb = Lexing.from_channel c in
     Loc.set_file file lb;
     Typing.open_file env path;
@@ -289,7 +289,7 @@ rule token = parse
       let add_m _ m mm = Mid.add m.mod_theory.th_name m mm in
       Mid.iter print_m (Mstr.fold add_m mm Mid.empty)
     end;
-    mm
+    mm *)
 
   let whyml_sleek_format = "whyml_sleek"
 

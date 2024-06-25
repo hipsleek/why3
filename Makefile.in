@@ -222,6 +222,7 @@ GENERATED =
 # Why3 library
 ##############
 
+# sleek support
 LIBGENERATED = \
 	src/util/config.ml \
 	src/util/rc.ml src/util/lexlib.ml src/util/mysexplib.ml \
@@ -235,7 +236,11 @@ LIBGENERATED = \
 	src/driver/driver_lexer.ml \
 	src/driver/sexp.ml \
 	src/session/compress.ml src/session/xml.ml \
-	src/session/strategy_parser.ml
+	src/session/strategy_parser.ml \
+	src/sleek/lexer_sleek.ml \
+	src/sleek/lexlib_sleek.ml \
+	src/sleek/parser_sleek_tokens.mli src/sleek/parser_sleek_tokens.ml \
+	src/sleek/parser_sleek.mli src/sleek/parser_sleek.ml \
 
 LIB_UTIL = exn_printer mysexplib config bigInt mlmpfr_wrapper util opt lists strings \
 	   pp extmap extset exthtbl weakhtbl diffmap hcpt \
@@ -303,8 +308,12 @@ LIB_SESSION = compress xml termcode session_itp \
 	      server_utils itp_communication \
 	      itp_server json_util unix_scheduler
 
+# sleek support
+LIB_SLEEK = lexer_sleek lexlib_sleek parser_sleek_tokens parser_sleek ptree_sleek
+
 LIB_CMIONLY = driver/driver_ast
 
+# sleek support
 LIBMODULES =  $(addprefix src/util/, $(LIB_UTIL)) \
 	      $(addprefix src/core/, $(LIB_CORE)) \
 	      $(addprefix src/driver/, $(LIB_DRIVER)) \
@@ -315,9 +324,11 @@ LIBMODULES =  $(addprefix src/util/, $(LIB_UTIL)) \
 	      $(addprefix src/parser/, $(LIB_PARSER)) \
 	      $(addprefix src/transform/, $(LIB_TRANSFORM)) \
 	      $(addprefix src/printer/, $(LIB_PRINTER)) \
-	      $(addprefix src/session/, $(LIB_SESSION))
+	      $(addprefix src/session/, $(LIB_SESSION)) \
+		  $(addprefix src/sleek/, $(LIB_SLEEK))
 
-LIBDIRS = util core driver mlw extract parser transform printer session
+# sleek support
+LIBDIRS = util core driver mlw extract parser transform printer session sleek
 
 ifeq (@enable_infer@,yes)
 	LIBDIRS += infer
@@ -338,6 +349,8 @@ $(LIBDEP) $(LIBCMO) $(LIBCMX) $(LIBCMI): INCLUDES += $(LIBINCLUDES)
 $(LIBCMX): OFLAGS += -for-pack Why3
 
 $(LIBDEP): $(LIBGENERATED)
+
+# TODO: sleek support for ptree_sleek?
 
 src/parser/ptree.cmx src/parser/ptree.cmo: FLAGS += -w -70
 src/util/mysexplib.cmx src/util/mysexplib.cmo: FLAGS += -w -70
@@ -2106,6 +2119,16 @@ pl%gins/cfg/cfg_parser.ml pl%gins/cfg/cfg_parser.mli: src/parser/parser_common.m
 	$(SHOW) 'Menhir $^'
 	$(HIDE)$(MENHIR) --table --explain --strict --base plugins/cfg/cfg_parser $^
 	$(HIDE)for f in plugins/cfg/cfg_parser.mli plugins/cfg/cfg_parser.ml; do (echo "open Why3"; cat $$f) > $$f.new && mv $$f.new $$f; done
+
+# sleek support
+src/s%eek/parser_sleek_tokens.ml src/s%eek/parser_sleek_tokens.mli: src/sleek/sleek_parser_common.mly
+	$(SHOW) 'Menhir $^'
+	$(HIDE)$(MENHIR) --base src/sleek/parser_sleek_tokens --only-tokens $^
+
+src/s%eek/parser_sleek.ml src/s%eek/parser_sleek.mli: src/sleek/parser_sleek_common.mly src/sleek/parser_sleek.mly
+	$(SHOW) 'Menhir $^'
+	$(HIDE)$(MENHIR) --table --explain --strict --base src/sleek/parser_sleek \
+		--external-tokens Parser_sleek_tokens $^
 
 %.ml %.mli: %.mly
 	$(SHOW) 'Menhir $<'

@@ -27,8 +27,8 @@ val parse_list_ident: Lexing.lexbuf -> Ptree_sleek.ident list
 val parse_mlw_file: Lexing.lexbuf -> Ptree_sleek.mlw_file
 
 (* TODO: no longer return Pmodule.mlw_file *)
-val read_channel: Env.env -> Env.pathname -> string -> in_channel ->
-  Pmodule.mlw_file
+(* val read_channel: Env.env -> Env.pathname -> string -> in_channel ->
+  Pmodule.mlw_file *)
 
 (* Name of the registered format for whyml *)
 val whyml_sleek_format: Env.fformat
