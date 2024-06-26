@@ -319,3 +319,12 @@ trywhy3.tar.gz
 # Opam
 
 _opam/
+
+# /src/sleek/
+/src/sleek/lexer_sleek.ml
+/src/sleek/parser_sleek.ml
+/src/sleek/parser_sleek.mli
+/src/sleek/parser_sleek.conflicts
+/src/sleek/lexlib_sleek.ml
+/src/sleek/parser_sleek_tokens.ml
+/src/sleek/parser_sleek_tokens.mli

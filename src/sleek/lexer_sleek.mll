@@ -14,7 +14,7 @@
 
   let keywords = Hashtbl.create 97
   let () =
-    List.iter (fun (x,y) -> Hashtbl.add keywords x y) Keywords.keyword_tokens
+    List.iter (fun (x,y) -> Hashtbl.add keywords x y) Keywords_sleek.keyword_tokens
 
   let warn_inexistent_file =
     Loc.register_warning "inexistent_file" "Warn about inexistent file in source location"
@@ -216,10 +216,6 @@ rule token = parse
       { Lexlib.illegal_character c lexbuf }
 
 {
-
-  let debug = Debug.register_info_flag "print_sleek_modules"
-    ~desc:"Print@ program@ modules@ @with @Sleek@ spec@ after@ typechecking."
-
   exception Error of string option
 
   let () = Exn_printer.register (fun fmt exn -> match exn with
@@ -238,16 +234,10 @@ rule token = parse
       I.lexer_lexbuf_to_supplier (fun x -> let t = token x in last := t; t) lb
     and succeed t = t
     and fail checkpoint =
-      let text = Lexing.lexeme lb in
-      let fname = lb.Lexing.lex_curr_p.Lexing.pos_fname in
-      (* TODO/FIXME: ad-hoc fix for TryWhy3/Str incompatibility *)
-      let s = if Strings.has_prefix "/trywhy3_input." fname
-        then None
-        else Report.report text !last checkpoint in
       (* Typing.close_file is supposedly done at the end of the file in
          parsing.mly. If there is a syntax error, we still need to close it (to
          be able to reload). *)
-      Loc.with_location (fun _x -> raise (Error s)) lb
+      Loc.with_location (fun _x -> raise (Error None)) lb
     in
     I.loop_handle succeed fail supplier checkpoint
 
@@ -274,26 +264,24 @@ rule token = parse
 
   let parse_mlw_file lb = build_parsing_function Parser_sleek.Incremental.mlw_file_parsing_only lb
 
-  (* let read_channel env path file c =
+  let read_channel env path file c =
     let lb = Lexing.from_channel c in
     Loc.set_file file lb;
-    Typing.open_file env path;
-    let mm =
-      try
-        build_parsing_function Parser_sleek.Incremental.mlw_file lb
-      with
-        e -> ignore (Typing.discard_file ()); raise e
+    let _ = try
+      build_parsing_function Parser_sleek.Incremental.mlw_file_parsing_only lb
+    with
+      e -> ignore (Typing.discard_file ()); raise e
     in
-    if path = [] && Debug.test_flag debug then begin
+    (* if path = [] && Debug.test_flag debug then begin
       let print_m _ m = Format.eprintf "%a@\n@." print_module m in
       let add_m _ m mm = Mid.add m.mod_theory.th_name m mm in
       Mid.iter print_m (Mstr.fold add_m mm Mid.empty)
-    end;
-    mm *)
+    end; *)
+    Wstdlib.Mstr.empty
 
   let whyml_sleek_format = "whyml_sleek"
 
-  let () = Env.register_format mlw_language whyml_format ["mlws"]
+  let () = Env.register_format mlw_language whyml_sleek_format ["mlws"]
       read_channel ~desc:"WhyML@ programming@ and@ specification@ language@ with@ Sleek"
 
 }

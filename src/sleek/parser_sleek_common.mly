@@ -46,6 +46,8 @@
 
   let empty_sleek_spec = ""
 
+  let sleek_spec_union s1 s2 = s1 ^ s2
+
   let empty_spec = {
     sp_pre     = [];
     sp_post    = [];
@@ -171,9 +173,6 @@
     Loc.errorm ~loc "cannot determine the type of the parameter"
 
   let error_loc loc = Loc.error ~loc Error
-
-  let warn_redundant_import =
-    Loc.register_warning "redundant import" "Warn about redundant import"
 
   let () = Exn_printer.register (fun fmt exn -> match exn with
     | Error -> Format.fprintf fmt "syntax error %s" (Parser_messages.message 1)
@@ -346,11 +345,6 @@
 %nonassoc prec_no_else
 %nonassoc DOT ELSE RETURN
 
-(* Sleek *)
-%nonassoc prec_no_sleek_spec
-%nonassoc SLEEK_SPEC
-(* Sleek *)
-
 %nonassoc prec_no_spec
 %nonassoc REQUIRES ENSURES RETURNS RAISES READS WRITES ALIAS DIVERGES VARIANT
 %nonassoc below_LARROW
@@ -401,18 +395,17 @@ See also `plugins/cfg/cfg_parser.mly`
     { (Duseexport $3) }
 | CLONE EXPORT tqualid clone_subst
     { let loc = floc $startpos $endpos in
-      (Dcloneexport (loc,$3, $4)) }
+      (Dcloneexport (loc,$3, $4))
+    }
 | USE boption(IMPORT) m_as_list = comma_list1(use_as)
     { let loc = floc $startpos $endpos in
       let exists_as = List.exists (fun (_, q) -> q <> None) m_as_list in
-      if $2 && not exists_as then Loc.warning ~loc warn_redundant_import
-        "the keyword `import' is redundant here and can be omitted";
-      (Duseimport (loc, $2, m_as_list)) }
+      (Duseimport (loc, $2, m_as_list))
+    }
 | CLONE boption(IMPORT) tqualid option(preceded(AS, uident)) clone_subst
     { let loc = floc $startpos $endpos in
-      if $2 && $4 = None then Loc.warning ~loc warn_redundant_import
-        "the keyword `import' is redundant here and can be omitted";
-      (Dcloneimport (loc, $2, $3, $4, $5)) }
+      (Dcloneimport (loc, $2, $3, $4, $5))
+    }
 
 %public use_as:
 | n = tqualid q = option(preceded(AS, uident)) { (n, q) }
@@ -928,32 +921,34 @@ kind:
 (* Function definitions *)
 
 rec_defn:
-| sleek_spec ghost kind attrs(lident_rich) binders return_opt spec EQUAL spec seq_expr
-    { let pat, ty, mask = $6 in
-      let spec = apply_return pat (spec_union $7 $9) in
+| ghost kind attrs(lident_rich) binders return_opt sleek_spec spec EQUAL sleek_spec spec seq_expr
+    { let pat, ty, mask = $5 in
+      let spec = apply_return pat (spec_union $7 $10) in
       let id = mk_id return_id $startpos($8) $endpos($8) in
-      let e = { $10 with expr_desc = Eoptexn (id, mask, $10) } in
-      let sleek_spec = $1 in
-      $4, ghost $2, $3, $5, ty, pat, mask, apply_partial_sp $2 spec, sleek_spec, e }
+      let e = { $11 with expr_desc = Eoptexn (id, mask, $11) } in
+      let sleek_spec = sleek_spec_union $6 $9 in
+      $3, ghost $1, $2, $4, ty, pat, mask, apply_partial_sp $1 spec, sleek_spec, e
+    }
 
 fun_defn:
-| sleek_spec binders return_opt spec EQUAL spec seq_expr
-    { let pat, ty, mask = $3 in
-      let spec = apply_return pat (spec_union $4 $6) in
+| binders return_opt sleek_spec spec EQUAL sleek_spec spec seq_expr
+    { let pat, ty, mask = $2 in
+      let spec = apply_return pat (spec_union $4 $7) in
       let id = mk_id return_id $startpos($5) $endpos($5) in
-      let e = { $7 with expr_desc = Eoptexn (id, mask, $7) } in
-      let sleek_spec = $1 in
-      Efun ($2, ty, pat, mask, spec, sleek_spec, e) }
+      let e = { $8 with expr_desc = Eoptexn (id, mask, $8) } in
+      let sleek_spec = sleek_spec_union $3 $6 in
+      Efun ($1, ty, pat, mask, spec, sleek_spec, e)
+    }
 
 fun_decl:
-| sleek_spec params1 return_opt spec
-    { let pat, ty, mask = $3 in
-      Eany ($2, Expr.RKnone, ty, pat, mask, apply_return pat $4, $1) }
+| params1 return_opt sleek_spec spec
+    { let pat, ty, mask = $2 in
+      Eany ($1, Expr.RKnone, ty, pat, mask, apply_return pat $4, $3) }
 
 const_decl:
-| sleek_spec return_opt spec
-    { let pat, ty, mask = $2 in
-      Eany ([], Expr.RKnone, ty, pat, mask, apply_return pat $3, $1) }
+| return_opt sleek_spec spec
+    { let pat, ty, mask = $1 in
+      Eany ([], Expr.RKnone, ty, pat, mask, apply_return pat $3, $2) }
 
 const_defn:
 | cast EQUAL seq_expr   { { $3 with expr_desc = Ecast ($3, $1) } }
@@ -1302,8 +1297,8 @@ for_dir:
 (* Specification *)
 
 sleek_spec: (* TODO: change the representation of sleek spec *)
-| (* epsilon *) %prec prec_no_sleek_spec { empty_sleek_spec }
-| SLEEK_SPEC                             { $1 }
+| (* epsilon *) { empty_sleek_spec }
+| SLEEK_SPEC    { $1 }
 
 %public spec:
 | (* epsilon *) %prec prec_no_spec  { empty_spec }

@@ -1,4 +1,6 @@
 {
+  open Lexing
+
   exception UnterminatedSleekSpec
 
   let () = Exn_printer.register (fun fmt e -> match e with

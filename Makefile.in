@@ -240,7 +240,7 @@ LIBGENERATED = \
 	src/sleek/lexer_sleek.ml \
 	src/sleek/lexlib_sleek.ml \
 	src/sleek/parser_sleek_tokens.mli src/sleek/parser_sleek_tokens.ml \
-	src/sleek/parser_sleek.mli src/sleek/parser_sleek.ml \
+	src/sleek/parser_sleek.mli src/sleek/parser_sleek.ml
 
 LIB_UTIL = exn_printer mysexplib config bigInt mlmpfr_wrapper util opt lists strings \
 	   pp extmap extset exthtbl weakhtbl diffmap hcpt \
@@ -309,7 +309,9 @@ LIB_SESSION = compress xml termcode session_itp \
 	      itp_server json_util unix_scheduler
 
 # sleek support
-LIB_SLEEK = lexer_sleek lexlib_sleek parser_sleek_tokens parser_sleek ptree_sleek
+LIB_SLEEK = \
+	ptree_sleek lexlib_sleek parser_sleek_tokens parser_sleek \
+	keywords_sleek lexer_sleek
 
 LIB_CMIONLY = driver/driver_ast
 
@@ -2121,7 +2123,7 @@ pl%gins/cfg/cfg_parser.ml pl%gins/cfg/cfg_parser.mli: src/parser/parser_common.m
 	$(HIDE)for f in plugins/cfg/cfg_parser.mli plugins/cfg/cfg_parser.ml; do (echo "open Why3"; cat $$f) > $$f.new && mv $$f.new $$f; done
 
 # sleek support
-src/s%eek/parser_sleek_tokens.ml src/s%eek/parser_sleek_tokens.mli: src/sleek/sleek_parser_common.mly
+src/s%eek/parser_sleek_tokens.ml src/s%eek/parser_sleek_tokens.mli: src/sleek/parser_sleek_common.mly
 	$(SHOW) 'Menhir $^'
 	$(HIDE)$(MENHIR) --base src/sleek/parser_sleek_tokens --only-tokens $^
 

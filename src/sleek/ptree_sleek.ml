@@ -214,6 +214,7 @@ type xpost = Loc.position * (qualid * (pattern * term) option) list
 
 (** Sleek contract *)
 type sleek_spec = string
+[@@deriving sexp]
 
 (** Contract *)
 type spec = {
