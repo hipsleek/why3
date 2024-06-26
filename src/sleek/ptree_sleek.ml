@@ -218,6 +218,7 @@ type sleek_spec = string
 
 (** Contract *)
 type spec = {
+    sp_sleek   : sleek_spec list; (** sleek spec *)
     sp_pre     : pre list; (** preconditions *)
     sp_post    : post list; (** normal postconditions *)
     sp_xpost   : xpost list; (** exceptional postconditions *)
@@ -269,9 +270,9 @@ and expr_desc =
   (** [let ... in ...] expression *)
   | Erec of fundef list * expr
   (** Local definition of function(s), possibly mutually recursive *)
-  | Efun of binder list * pty option * pattern * Ity.mask * spec * sleek_spec * expr
+  | Efun of binder list * pty option * pattern * Ity.mask * spec * expr
   (** Anonymous function *)
-  | Eany of param list * Expr.rs_kind * pty option * pattern * Ity.mask * spec * sleek_spec
+  | Eany of param list * Expr.rs_kind * pty option * pattern * Ity.mask * spec
   (** "any params : ty <spec>": abstract expression with a specification,
        generating a VC for existence *)
   | Etuple of expr list
@@ -334,7 +335,7 @@ and exn_branch = qualid * pattern option * expr
 
 (** Local function definition *)
 and fundef = ident * ghost * Expr.rs_kind *
-               binder list * pty option * pattern * Ity.mask * spec * sleek_spec * expr
+               binder list * pty option * pattern * Ity.mask * spec * expr
 [@@deriving sexp]
 
 (** {2 Declarations} *)
