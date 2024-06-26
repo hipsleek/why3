@@ -1588,6 +1588,41 @@ install-bin::
 
 install_local:: bin/why3pp.$(SHAREDBEST)
 
+# sleek support
+#################
+# why3pp_sleek #
+#################
+
+PP_SLEEK_FILES = why3pp_sleek
+PP_SLEEK_MODULES = $(addprefix src/tools/, $(PP_SLEEK_FILES))
+
+PP_SLEEK_DEP = $(addsuffix .dep, $(PP_SLEEK_MODULES))
+PP_SLEEK_CMO = $(addsuffix .cmo, $(PP_SLEEK_MODULES))
+PP_SLEEK_CMX = $(addsuffix .cmx, $(PP_SLEEK_MODULES))
+
+$(PP_SLEEK_DEP) $(PP_SLEEK_CMO) $(PP_SLEEK_CMX): INCLUDES += -I src/tools
+
+# build targets
+
+byte: bin/why3pp_sleek.cma
+opt:  bin/why3pp_sleek.cmxs
+
+bin/why3pp_sleek.cmxs: $(PP_SLEEK_CMX)
+bin/why3pp_sleek.cma:  $(PP_SLEEK_CMO)
+
+# depend and clean targets
+
+MAKEINC += $(PP_SLEEK_DEP)
+
+uninstall-bin::
+	rm -f $(TOOLDIR)/why3pp_sleek.$(SHAREDBEST)
+
+install-bin::
+	$(MKDIR_P) $(TOOLDIR)
+	$(INSTALL_DATA) bin/why3pp_sleek.$(SHAREDBEST) $(TOOLDIR)
+
+install_local:: bin/why3pp_sleek.$(SHAREDBEST)
+
 #########
 # why3doc
 #########
