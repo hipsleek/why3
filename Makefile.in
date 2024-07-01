@@ -693,7 +693,8 @@ TOOLSGENERATED = src/tools/why3wc.ml
 
 TOOLS_BIN = \
 	why3config why3execute why3extract why3prove \
-	why3realize why3replay why3show why3wc why3bench
+	why3realize why3replay why3show why3wc why3bench \
+	why3inspect
 
 TOOLS_FILES = main $(TOOLS_BIN)
 
