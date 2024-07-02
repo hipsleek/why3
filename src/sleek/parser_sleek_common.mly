@@ -877,6 +877,11 @@ minus_numeral:
 | INTEGER { Constant.ConstInt $1 }
 | REAL    { Constant.ConstReal $1 }
 
+(* Top level sleek specification *)
+
+%public sleek_decl:
+| SLEEK_SPEC { Dsleek $1 }
+
 (* Program declarations *)
 
 %public prog_decl:

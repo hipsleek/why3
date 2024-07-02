@@ -40,6 +40,7 @@ expr_eof:
 decl_eof:
 | pure_decl EOF { $1 }
 | prog_decl EOF { $1 }
+| sleek_decl EOF { $1 }
 
 (* Parsing of a list of qualified identifiers for the ITP *)
 
@@ -106,7 +107,7 @@ module_decl_parsing_only:
     { let loc, import, qid = $1 in (Dscope(loc, import, qid, $2)) }
 | IMPORT uqualid
     { (Dimport $2) }
-| d = pure_decl | d = prog_decl | d = meta_decl
+| d = pure_decl | d = prog_decl | d = meta_decl | d = sleek_decl
     { d }
 | use_clone_parsing_only
     { $1 }
