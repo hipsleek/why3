@@ -26,13 +26,13 @@ open Mysexplib.Std [@@warning "-33"]
 (** {2 Identifiers and attributes} *)
 
 (** attributes, with a specific case for a source location *)
-type attr =
+type attr = Ptree.attr =
   | ATstr of Ident.attribute
   | ATpos of Loc.position
 [@@deriving sexp]
 
 (** identifiers, with attributes and a source location *)
-type ident = {
+type ident = Ptree.ident = {
   id_str : string;
   id_ats : attr list;
   id_loc : Loc.position;
@@ -40,7 +40,7 @@ type ident = {
 [@@deriving sexp]
 
 (** qualified identifiers *)
-type qualid =
+type qualid = Ptree.qualid =
   | Qident of ident
   | Qdot of qualid * ident
 [@@deriving sexp]
@@ -48,7 +48,7 @@ type qualid =
 (** {2 Types} *)
 
 (** type expressions *)
-type pty =
+type pty = Ptree.pty =
   | PTtyvar of ident
   (** type variable *)
   | PTtyapp of qualid * pty list
@@ -77,12 +77,12 @@ type ghost = bool
 [@@deriving sexp]
 
 (** Patterns, equipped with a source location *)
-type pattern = {
+type pattern = Ptree.pattern = {
   pat_desc : pat_desc;
   pat_loc  : Loc.position;
 }
 
-and pat_desc =
+and pat_desc = Ptree.pat_desc =
   | Pwild
   (** wildcard, that is "_" *)
   | Pvar of ident
@@ -117,16 +117,16 @@ type binder = Loc.position * ident option * ghost * pty option
 
 (** parameter as 4-uple [(loc,id,ghost,type)] to represent
    "ghost? id? : type". *)
-type param  = Loc.position * ident option * ghost * pty
+type param = Loc.position * ident option * ghost * pty
 [@@deriving sexp]
 
 (** Terms, equipped with a source location *)
-type term = {
+type term = Ptree.term = {
   term_desc : term_desc;
   term_loc  : Loc.position;
 }
 
-and term_desc =
+and term_desc = Ptree.term_desc =
   | Ttrue
   (** the true proposition *)
   | Tfalse
@@ -341,7 +341,7 @@ and fundef = ident * ghost * Expr.rs_kind *
 (** {2 Declarations} *)
 
 (** record fields *)
-type field = {
+type field = Ptree.field = {
   f_loc     : Loc.position;
   f_ident   : ident;
   f_pty     : pty;
@@ -351,7 +351,7 @@ type field = {
 [@@deriving sexp]
 
 (** Type definition body *)
-type type_def =
+type type_def = Ptree.type_def =
   | TDalias     of pty
   (** alias type *)
   | TDalgebraic of (Loc.position * ident * param list) list
@@ -365,7 +365,7 @@ type type_def =
 [@@deriving sexp]
 
 (** The different kinds of visibility *)
-type visibility = Public | Private | Abstract (** = Private + ghost fields *)
+type visibility = Ptree.visibility = Public | Private | Abstract (** = Private + ghost fields *)
 [@@deriving sexp]
 
 (** A type declaration *)
@@ -382,7 +382,7 @@ type type_decl = {
 [@@deriving sexp]
 
 (** A single declaration of a function or predicate *)
-type logic_decl = {
+type logic_decl = Ptree.logic_decl =  {
   ld_loc    : Loc.position;
   ld_ident  : ident;
   ld_params : param list;
@@ -392,7 +392,7 @@ type logic_decl = {
 [@@deriving sexp]
 
 (** A single declaration of an inductive predicate *)
-type ind_decl = {
+type ind_decl = Ptree.ind_decl = {
   in_loc    : Loc.position;
   in_ident  : ident;
   in_params : param list;
@@ -401,7 +401,7 @@ type ind_decl = {
 [@@deriving sexp]
 
 (** Arguments of "meta" declarations *)
-type metarg =
+type metarg = Ptree.metarg =
   | Mty  of pty
   | Mfs  of qualid
   | Mps  of qualid
@@ -414,7 +414,7 @@ type metarg =
 [@@deriving sexp]
 
 (** The possible "clone" substitution elements *)
-type clone_subst =
+type clone_subst = Ptree.clone_subst =
   | CStsym  of qualid * ident list * pty
   | CSfsym  of qualid * qualid
   | CSpsym  of qualid * qualid
@@ -428,6 +428,8 @@ type clone_subst =
 
 (** top-level declarations *)
 type decl =
+  | Dsleek of string
+  (** Sleek top-level constructs *)
   | Dtype of type_decl list
   (** Type declaration *)
   | Dlogic of logic_decl list
