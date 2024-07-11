@@ -159,8 +159,8 @@ EXTOBJS =
 EXTLIBS = menhirLib
 endif
 
-EXTLIBS += @RELIB@ unix nums dynlink @ZIPLIB@ @WHY3LIB@ @INFERLIB@
-EXTPKGS = menhirLib @RELIB@ unix num dynlink @ZIPLIB@ @MLMPFR@ @WHY3LIB@ @INFERPKG@ @SEXPLIB@ @SEXPLIBPPX@
+EXTLIBS += @RELIB@ unix nums dynlink @ZIPLIB@ @WHY3LIB@ @INFERLIB@ hipsleek.api
+EXTPKGS = menhirLib @RELIB@ unix num dynlink @ZIPLIB@ @MLMPFR@ @WHY3LIB@ @INFERPKG@ @SEXPLIB@ @SEXPLIBPPX@ hipsleek.api
 
 EXTCMA	= $(addsuffix .cmo,$(EXTOBJS)) $(addsuffix .cma,$(EXTLIBS))
 EXTCMXA = $(addsuffix .cmx,$(EXTOBJS)) $(addsuffix .cmxa,$(EXTLIBS))
@@ -311,7 +311,7 @@ LIB_SESSION = compress xml termcode session_itp \
 # sleek support
 LIB_SLEEK = \
 	ptree_sleek ptree_sleek_helpers lexlib_sleek parser_sleek_tokens parser_sleek \
-	keywords_sleek lexer_sleek
+	keywords_sleek lexer_sleek forward_verification
 
 LIB_CMIONLY = driver/driver_ast
 
@@ -1590,39 +1590,39 @@ install-bin::
 install_local:: bin/why3pp.$(SHAREDBEST)
 
 # sleek support
-#################
-# why3pp_sleek #
-#################
+#############
+# why3sleek #
+#############
 
-PP_SLEEK_FILES = why3pp_sleek
-PP_SLEEK_MODULES = $(addprefix src/tools/, $(PP_SLEEK_FILES))
+SLEEK_FILES = why3sleek
+SLEEK_MODULES = $(addprefix src/tools/, $(SLEEK_FILES))
 
-PP_SLEEK_DEP = $(addsuffix .dep, $(PP_SLEEK_MODULES))
-PP_SLEEK_CMO = $(addsuffix .cmo, $(PP_SLEEK_MODULES))
-PP_SLEEK_CMX = $(addsuffix .cmx, $(PP_SLEEK_MODULES))
+SLEEK_DEP = $(addsuffix .dep, $(SLEEK_MODULES))
+SLEEK_CMO = $(addsuffix .cmo, $(SLEEK_MODULES))
+SLEEK_CMX = $(addsuffix .cmx, $(SLEEK_MODULES))
 
-$(PP_SLEEK_DEP) $(PP_SLEEK_CMO) $(PP_SLEEK_CMX): INCLUDES += -I src/tools
+$(SLEEK_DEP) $(SLEEK_CMO) $(SLEEK_CMX): INCLUDES += -I src/tools
 
 # build targets
 
-byte: bin/why3pp_sleek.cma
-opt:  bin/why3pp_sleek.cmxs
+byte: bin/why3sleek.cma
+opt:  bin/why3sleek.cmxs
 
-bin/why3pp_sleek.cmxs: $(PP_SLEEK_CMX)
-bin/why3pp_sleek.cma:  $(PP_SLEEK_CMO)
+bin/why3sleek.cmxs: $(SLEEK_CMX)
+bin/why3sleek.cma:  $(SLEEK_CMO)
 
 # depend and clean targets
 
-MAKEINC += $(PP_SLEEK_DEP)
+MAKEINC += $(SLEEK_DEP)
 
 uninstall-bin::
-	rm -f $(TOOLDIR)/why3pp_sleek.$(SHAREDBEST)
+	rm -f $(TOOLDIR)/why3sleek.$(SHAREDBEST)
 
 install-bin::
 	$(MKDIR_P) $(TOOLDIR)
-	$(INSTALL_DATA) bin/why3pp_sleek.$(SHAREDBEST) $(TOOLDIR)
+	$(INSTALL_DATA) bin/why3sleek.$(SHAREDBEST) $(TOOLDIR)
 
-install_local:: bin/why3pp_sleek.$(SHAREDBEST)
+install_local:: bin/why3sleek.$(SHAREDBEST)
 
 #########
 # why3doc

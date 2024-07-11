@@ -328,3 +328,6 @@ _opam/
 /src/sleek/lexlib_sleek.ml
 /src/sleek/parser_sleek_tokens.ml
 /src/sleek/parser_sleek_tokens.mli
+
+# logs
+/logs/

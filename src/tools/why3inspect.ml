@@ -122,9 +122,9 @@ and print_mod_unit : Pmodule.mod_unit Pp.pp =
 and print_namespace_unfold : Pmodule.namespace Pp.pp =
   fun fmt ns ->
     fprintf fmt "namespace{@[<hv>ns_ts=%a,@ ns_ps=%a,@ ns_xs=%a,@ ns_ns=%a@]}"
-      (print_list print_string) (Mstr.keys ns.Pmodule.ns_ts)
-      (print_list print_string) (Mstr.keys ns.Pmodule.ns_ps)
-      (print_list print_string) (Mstr.keys ns.Pmodule.ns_xs)
+      (print_list (print_binding print_string print_itysymbol)) (Mstr.bindings ns.Pmodule.ns_ts)
+      (print_list (print_binding print_string print_prog_symbol)) (Mstr.bindings ns.Pmodule.ns_ps)
+      (print_list (print_binding print_string print_xsymbol)) (Mstr.bindings ns.Pmodule.ns_xs)
       (print_list (print_binding print_string print_namespace)) (Mstr.bindings ns.Pmodule.ns_ns)
 
 and print_namespace_fold : Pmodule.namespace Pp.pp =
@@ -631,9 +631,10 @@ and print_vsymbol : Term.vsymbol Pp.pp =
 
 and print_ident_unfold : Ident.ident Pp.pp =
   fun fmt i ->
-    fprintf fmt "ident{@[<hv>id_string=%a,@ id_attrs=%a@]}"
+    fprintf fmt "ident{@[<hv>id_string=%a,@ id_attrs=%a,@ id_tag=%a@]}"
       print_string i.Ident.id_string
       (print_list print_attribute) (Ident.Sattr.elements i.Ident.id_attrs)
+      print_int (Weakhtbl.tag_hash i.Ident.id_tag)
 
 and print_ident_fold : Ident.ident Pp.pp =
   fun fmt i ->
@@ -827,13 +828,23 @@ and print_meta_decl : Pdecl.meta_decl Pp.pp =
   fun fmt _ ->
     fprintf fmt "meta_decl(...)"
 
+and print_prog_symbol : Pmodule.prog_symbol Pp.pp =
+  fun fmt ps -> match ps with
+    | Pmodule.PV pv -> fprintf fmt "PV(@[<hv>%a@])"
+        print_pvsymbol pv
+    | Pmodule.RS rs -> fprintf fmt "RS(@[<hv>%a@])"
+        print_rsymbol rs
+    | Pmodule.OO srs -> fprintf fmt "OO(@[<hv>%a@])"
+        (print_list print_rsymbol) (Expr.Srs.elements srs)
+
 let handle_no_file () =
   Whyconf.Args.exit_with_usage usage_msg
 
 let handle_file file =
-  let handle_module m = printf "%a@\n@." print_pmodule m in
+  let handle_module m = printf "%a@." print_pmodule m in
   let (modules, _) = Env.read_file Pmodule.mlw_language env file in
   let modules = Mstr.values modules in
+  printf "FILE: %s@\n@." file;
   List.iter handle_module modules
 
 let () =
