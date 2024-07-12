@@ -65,7 +65,7 @@ and compile_spec_in_mod_unit specs = function
   | _ -> Mstr.empty
 
 and compile_spec_in_pdecl specs = function
-  | Pdecl.{ pd_node = PDlet Expr.(LDsym (rs, { c_node = Cfun _; _ })); _ } ->
+  | Pdecl.{ pd_node = PDlet Expr.LDsym (rs, { c_node = Cfun _; _ }); _ } ->
       let name = rs.Expr.rs_name.Ident.id_string in
       let spec = Mstr.find name specs in
       let spec = String.concat "\n" spec in
@@ -142,7 +142,7 @@ and forward_on_expr_node ctx = function
             Sleekapi.upd_result_with_int ctx i
         | _ -> todo ()
       end
-  | Expr.Eexec (Expr.{ c_node; _ }, cty) ->
+  | Expr.Eexec ({ c_node; _ }, cty) ->
       let _ = match c_node with
         | Expr.Capp (rs, args) ->
             (* we need to check pre-post with this rs-symbol *)
@@ -166,7 +166,7 @@ and forward_on_expr_node ctx = function
 (* We need to walk forward *)
 (* Now, how to we walk forward? What do we accepts as our argument? *)
 let verify_function (specs : spec_map) = function
-  | Pdecl.{ pd_node = PDlet Expr.(LDsym (rs, { c_node = Cfun expr; _ })); _ } ->
+  | Pmodule.Udecl Pdecl.{ pd_node = PDlet Expr.LDsym (rs, { c_node = Cfun expr; _ }); _ } ->
     (* rs is the function name *)
     (* ce is the function body *)
     (* the type of the result and of function arguments us stored in rs.cty *)
@@ -178,4 +178,8 @@ let verify_function (specs : spec_map) = function
     let ctx = forward_on_expr ctx expr in
     (* this is the final context. Then check *)
     Sleekapi.check_entail_post ctx spec params
-  | _ -> todo ()
+  | _ -> true
+
+
+let verify_module (specs : spec_map) Pmodule.{ mod_units } =
+  List.for_all (verify_function specs) mod_units

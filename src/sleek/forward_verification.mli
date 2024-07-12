@@ -17,9 +17,6 @@
 (* DON'T *)
 (* we shall not handle ADT at the moment *)
 
-type proof_env
-
-(* these are functions that modify the proof environment *)
 (*
 val add_predicate : 'a -> 'b
 val add_data : 'a -> 'b
@@ -35,3 +32,20 @@ val to_sleek_context : proof_env -> 'a
    - the second traversal is to reduce the parse tree into their core language
      and then we shall traverse on this core language instead
  *)
+
+open Wstdlib
+open Hipsleek_api
+
+val gather_spec_in_mlw_file : Ptree_sleek.mlw_file -> string list Mstr.t
+
+val gather_data_decl_in_mlw_file : Ptree_sleek.mlw_file -> unit
+
+val gather_logic_decl_in_mlw_file : Ptree_sleek.mlw_file -> unit
+
+type spec_map = (Sleekapi.sf * Sleekapi.param list) Mstr.t
+
+val compile_spec_in_pmodule : string list Mstr.t -> Pmodule.pmodule -> spec_map
+
+val verify_function : spec_map -> Pmodule.mod_unit -> bool
+
+val verify_module : spec_map -> Pmodule.pmodule -> bool
