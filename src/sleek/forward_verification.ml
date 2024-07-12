@@ -1,11 +1,8 @@
 open Wstdlib
 open Ptree_sleek
+open Hipsleek_api
 
-module Sleekapi = Hipsleek_api.Sleekapi
-
-type proof_env = int
-
-let todo () = assert false
+let todo () = failwith "not implemented!"
 
 (*
 let add_spec file = assert false
@@ -16,8 +13,19 @@ let add_predicate _ = assert false
 let to_sleek_context _ = assert false
 *)
 
+
 let union_all (ms : 'a Mstr.t list) : 'a Mstr.t =
   List.fold_left Mstr.set_union Mstr.empty ms
+
+let string_of_ident (id : Ident.ident) : string =
+  id.Ident.id_string
+
+let string_of_pvsymbol (pv : Ity.pvsymbol) : string =
+  string_of_ident (pv.Ity.pv_vs.Term.vs_name)
+
+let string_of_rsymbol (rs : Expr.rsymbol) : string =
+  string_of_ident (rs.Expr.rs_name)
+
 
 let rec gather_spec_in_mlw_file : mlw_file -> string list Mstr.t = function
   | Decls decls ->
@@ -38,18 +46,19 @@ and gather_spec_in_decl = function
       Mstr.singleton id_str spec.sp_sleek
   | Drec defs ->
       union_all (List.map gather_spec_in_fundef defs)
-  | _ ->
-      Mstr.empty
+  | _ -> Mstr.empty
 
 and gather_spec_in_fundef = function
   | ({ id_str; _ }, false, _, _, _, _, _, spec, _) ->
       Mstr.singleton id_str spec.sp_sleek
-  | _ ->
-      Mstr.empty
+  | _ -> Mstr.empty
 
 
-type spec_map = Sleekapi.sf Mstr.t
-let rec compile_spec_in_pmodule specs Pmodule.{ mod_units; _ } = todo ()
+type spec_map = (Sleekapi.sf * Sleekapi.param list) Mstr.t
+
+
+let rec compile_spec_in_pmodule specs Pmodule.{ mod_units; _ } : spec_map =
+  union_all (List.map (compile_spec_in_mod_unit specs) mod_units)
 
 and compile_spec_in_mod_unit specs = function
   | Pmodule.Udecl pdecl -> compile_spec_in_pdecl specs pdecl
@@ -60,12 +69,20 @@ and compile_spec_in_pdecl specs = function
       let name = rs.Expr.rs_name.Ident.id_string in
       let spec = Mstr.find name specs in
       let spec = String.concat "\n" spec in
-      let params = gather_params () in
+      let params = gather_params rs.Expr.rs_cty in
       let spec = Sleekapi.spec_decl name spec params in
-      Mstr.singleton name spec
-  | _ -> todo ()
+      Mstr.singleton name (spec, params)
+  | _ -> Mstr.empty
 
-and gather_params _ = todo ()
+and gather_params Ity.{ cty_args } =
+  List.map gather_param cty_args
+
+and gather_param pv =
+  let name = string_of_pvsymbol pv in
+  (* TODO: detect the actual type of the argument *)
+  let ty = Sleekapi.Int in
+  Sleekapi.{ param_type = ty; param_name = name; param_mod = CopyMod }
+
 
 let rec gather_data_decl_in_mlw_file = function
   | Decls decls ->
@@ -104,36 +121,61 @@ let rec gather_logic_decl_in_mlw_file = function
     raise (Invalid_argument "only support a single module at the moment!")
 
 and gather_logic_decl_in_decl = function
-  | Dsleek decl ->
-      Sleekapi.top_level_decl decl
+  | Dsleek decl -> Sleekapi.top_level_decl decl
   | _ -> ()
 
 
-let rec forward_on_expr Expr.{ e_node } =
-  forward_on_expr_node e_node
+let rec forward_on_expr ctx Expr.{ e_node } =
+  forward_on_expr_node ctx e_node
 
-and forward_on_expr_node = function
-  | Expr.Evar pv -> todo ()
-      (* result = var *)
-  | Expr.Econst c -> todo ()
-      (* result = var *)
-  | Expr.Eexec (cexp, cty) -> todo ()
+and forward_on_expr_node ctx = function
+  | Expr.Evar pv ->
+      let name = string_of_pvsymbol pv in
+      (* TODO: get the correct type of this pvsymbol *)
+      let ty = Sleekapi.Int in
+      Sleekapi.upd_result_with_var ctx ty name
+  | Expr.Econst c ->
+      begin match c with
+        | Constant.ConstInt int_const ->
+            (* TODO: what if this is a very big integer? *)
+            let i = Number.to_small_integer int_const in
+            Sleekapi.upd_result_with_int ctx i
+        | _ -> todo ()
+      end
+  | Expr.Eexec (Expr.{ c_node; _ }, cty) ->
+      let _ = match c_node with
+        | Expr.Capp (rs, args) ->
+            (* we need to check pre-post with this rs-symbol *)
+            (* TODO: what for the arith core from the API *)
+            todo ()
+        | Expr.Cpur (ls, args) -> todo ()
+        | _ -> todo ()
+      in todo ()
       (* function call, pre-post, then then continue *)
   | Expr.Elet (LDvar (pv, epv), e) ->
-      (* sequence *)
-      (* assign rule *)
-      todo ()
+      let name = string_of_pvsymbol pv in
+      let ty = Sleekapi.Int in
+      let ctx = forward_on_expr ctx epv in
+      let ctx = Sleekapi.add_assign_to_ctx ctx ty name in
+      forward_on_expr ctx e
   | Expr.Elet (defn, e) -> todo ()
   | Expr.Eif (cond, if_e, else_e) -> todo ()
   | _ -> todo ()
 
+
 (* We need to walk forward *)
 (* Now, how to we walk forward? What do we accepts as our argument? *)
-let verify_function = function
+let verify_function (specs : spec_map) = function
   | Pdecl.{ pd_node = PDlet Expr.(LDsym (rs, { c_node = Cfun expr; _ })); _ } ->
     (* rs is the function name *)
     (* ce is the function body *)
     (* the type of the result and of function arguments us stored in rs.cty *)
     (* not sure whether there is any difference between the ctype of the rssymbol and the cnode? *)
-    forward_on_expr expr
+    let name = string_of_rsymbol rs in
+    let spec, params = Mstr.find name specs in
+    (* initialize the context, somehow *)
+    let ctx = Sleekapi.init_ctx spec params in
+    let ctx = forward_on_expr ctx expr in
+    (* this is the final context. Then check *)
+    Sleekapi.check_entail_post ctx spec params
   | _ -> todo ()
