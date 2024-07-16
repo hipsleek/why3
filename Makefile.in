@@ -311,7 +311,7 @@ LIB_SESSION = compress xml termcode session_itp \
 # sleek support
 LIB_SLEEK = \
 	ptree_sleek ptree_sleek_helpers lexlib_sleek parser_sleek_tokens parser_sleek \
-	keywords_sleek lexer_sleek forward_verification
+	keywords_sleek lexer_sleek forward_verification sleek_primitives
 
 LIB_CMIONLY = driver/driver_ast
 
@@ -549,6 +549,9 @@ endif
 # Why3 plugins
 ##################
 
+# comment out the plugins
+ifeq (0, 1)
+
 PLUGGENERATED = \
 	plugins/tptp/tptp_lexer.ml \
 	plugins/tptp/tptp_parser.ml plugins/tptp/tptp_parser.mli \
@@ -684,6 +687,9 @@ uninstall-bin::
 install-bin::
 	$(MKDIR_P) $(LIBDIR)/why3/plugins
 	$(INSTALL_DATA) $(wildcard $(LIBPLUGCMA) $(LIBPLUGCMXS)) $(LIBDIR)/why3/plugins
+
+endif
+# comment out the plugins
 
 ###############
 # Why3 commands

@@ -1,5 +1,7 @@
 open Format
 open Why3
+open Wstdlib
+open Hipsleek_api
 
 let usage_msg =
   "<file>\n\
@@ -37,10 +39,12 @@ let prove_file file mlw_file =
   match pmodules with
     | [pmod] ->
         let open Forward_verification in
+        let built_in_specs = Sleek_primitives.register_primitives () in
         gather_data_decl_in_mlw_file mlw_file;
         gather_logic_decl_in_mlw_file mlw_file;
         let specs = gather_spec_in_mlw_file mlw_file in
         let specs = compile_spec_in_pmodule specs pmod in
+        let specs = Mstr.set_union built_in_specs specs in
         let ok = verify_module specs pmod in
         printf "prover returned: %s@." (string_of_bool ok)
     | _ -> raise (Invalid_argument "only support file with exactly one module!")
@@ -55,6 +59,8 @@ let handle_file file =
     prove_file file mlw_file
   else
     print_file mlw_file
+
+let () = Sleekapi.init ()
 
 let () =
   eprintf "why3pp_sleek: handle input file@.";

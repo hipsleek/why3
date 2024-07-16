@@ -329,5 +329,8 @@ _opam/
 /src/sleek/parser_sleek_tokens.ml
 /src/sleek/parser_sleek_tokens.mli
 
-# logs
+# sleek stuffs
 /logs/
+oc.out
+prelude.ss
+sleekapi_prelude.slk
