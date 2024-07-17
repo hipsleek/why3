@@ -40,8 +40,10 @@ let prove_file file mlw_file =
     | [pmod] ->
         let open Forward_verification in
         let built_in_specs = Sleek_primitives.register_primitives () in
+        Format.eprintf "why3sleek: primitives registered@.";
         gather_data_decl_in_mlw_file mlw_file;
         gather_logic_decl_in_mlw_file mlw_file;
+        Format.eprintf "why3sleek: top-level declarations registered@.";
         let specs = gather_spec_in_mlw_file mlw_file in
         let specs = compile_spec_in_pmodule specs pmod in
         let specs = Mstr.set_union built_in_specs specs in
@@ -63,7 +65,7 @@ let handle_file file =
 let () = Sleekapi.init ()
 
 let () =
-  eprintf "why3pp_sleek: handle input file@.";
+  eprintf "why3sleek: handle input file@.";
   try
     match !opt_file with
       | None -> handle_no_file ()

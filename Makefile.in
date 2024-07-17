@@ -311,7 +311,7 @@ LIB_SESSION = compress xml termcode session_itp \
 # sleek support
 LIB_SLEEK = \
 	ptree_sleek ptree_sleek_helpers lexlib_sleek parser_sleek_tokens parser_sleek \
-	keywords_sleek lexer_sleek forward_verification sleek_primitives
+	keywords_sleek lexer_sleek sleek_name_mangling forward_verification sleek_primitives
 
 LIB_CMIONLY = driver/driver_ast
 

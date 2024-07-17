@@ -1,7 +1,7 @@
 open Wstdlib
 open Ptree_sleek
 open Hipsleek_api
-open Hipsleek_common
+open Sleek_name_mangling
 
 let todo () = failwith "not implemented!"
 
@@ -17,22 +17,6 @@ let to_sleek_context _ = assert false
 
 let union_all (ms : 'a Mstr.t list) : 'a Mstr.t =
   List.fold_left Mstr.set_union Mstr.empty ms
-
-let string_of_ident (id : Ident.ident) : string =
-  let s = id.Ident.id_string in
-  if Ident.Sattr.mem Ident.proxy_attr id.Ident.id_attrs then
-    let t = string_of_int (Weakhtbl.tag_hash id.Ident.id_tag) in
-    s ^ "$" ^ t
-  else s
-
-let string_of_pvsymbol (pv : Ity.pvsymbol) : string =
-  string_of_ident pv.Ity.pv_vs.Term.vs_name
-
-let string_of_rsymbol (rs : Expr.rsymbol) : string =
-  string_of_ident rs.Expr.rs_name
-
-let string_of_lsymbol (ls : Term.lsymbol) : string =
-  string_of_ident ls.Term.ls_name
 
 let rec gather_spec_in_mlw_file : mlw_file -> string list Mstr.t = function
   | Decls decls ->
@@ -92,8 +76,7 @@ and gather_param pv =
 
 
 let rec gather_data_decl_in_mlw_file = function
-  | Decls decls ->
-      List.iter gather_data_decl_in_decl decls
+  | Decls decls
   | Modules [_, decls] ->
       List.iter gather_data_decl_in_decl decls
   | _ ->
@@ -107,9 +90,6 @@ and gather_data_decl_in_decl = function
 and gather_data_decl_in_type_decl = function
   | { td_ident = { id_str; _ }; td_def = TDrecord fields; _ } ->
       let fields = List.map gather_field fields in
-      (* convert the fields into string *)
-      (* and then push that into the sleek api *)
-      (* TODO: handle error *)
       Sleekapi.data_decl_cons id_str fields
   | _ -> ()
 
@@ -120,10 +100,9 @@ and gather_field { f_ident = { id_str; _ }; f_pty; _ } =
 
 
 let rec gather_logic_decl_in_mlw_file = function
-  | Decls decls ->
-    List.iter gather_data_decl_in_decl decls
+  | Decls decls
   | Modules [_, decls] ->
-    List.iter gather_data_decl_in_decl decls
+    List.iter gather_logic_decl_in_decl decls
   | _ ->
     raise (Invalid_argument "only support a single module at the moment!")
 
@@ -157,25 +136,31 @@ and forward_on_expr_node spec_map ctx = function
   | Expr.Eexec ({ c_node; _ }, cty) ->
       let apply_pre_post name args =
         let args_name = List.map string_of_pvsymbol args in
-        (* let spec, params = Mstr.find name spec_map in *)
-        let param_x = Sleekapi.{ param_type = Int; param_mod = RefMod; param_name = "x" } in
-        let param_y = Sleekapi.{ param_x with param_name = "y" } in
-        let params = [param_x; param_y] in
-        let spec = Sleekapi.spec_decl name "requires true ensures res = x + y;" params in
-
-        let new_ctx = Sleekapi.check_pre_post ctx spec false params args_name in
-        Format.eprintf "Exec_spec=%s@." (Sleekapi.Printer.string_of_sf spec);
         Format.eprintf "Exec_name=%s@." name;
         List.iter (Format.eprintf "Exec_arg=%s@.") args_name;
+        let spec, params = Mstr.find name spec_map in
+        Format.eprintf "Exec_spec=%s@." (Sleekapi.Printer.string_of_sf spec);
+        let new_ctx = Sleekapi.check_pre_post ctx spec false params args_name in
         Option.get new_ctx
       in
-      let name, args = match c_node with
-        | Expr.Capp (rs, args) -> string_of_rsymbol rs, args
-        | Expr.Cpur (ls, args) -> string_of_lsymbol ls, args
-        | _ -> todo ()
+      let get_field rs args =
+        if List.length args <> 1 then
+          raise (Invalid_argument "field access should have a single argument");
+        let field_name = string_of_rsymbol rs in
+        let target = List.hd args in
+        let target_name = string_of_pvsymbol target in
+        let typ = typ_of_pvsymbol target in
+        Sleekapi.data_field_read ctx typ target_name field_name
       in
-      let name = "add" in
-      apply_pre_post name args
+      begin match c_node with
+        | Expr.Capp (Expr.{ rs_field = Some _; _ } as rs, args) ->
+            get_field rs args
+        | Expr.Capp (rs, args) ->
+            apply_pre_post (string_of_rsymbol rs) args
+        | Expr.Cpur (ls, args) ->
+            apply_pre_post (string_of_lsymbol ls) args
+        | _ -> todo ()
+      end
   | Expr.Elet (LDvar (pv, epv), e) ->
       let name = string_of_pvsymbol pv in
       let ty = Sleekapi.Int in
@@ -184,7 +169,26 @@ and forward_on_expr_node spec_map ctx = function
       let ctx = Sleekapi.add_assign_to_ctx ctx ty name in
       forward_on_expr spec_map ctx e
   | Expr.Elet (defn, e) -> todo ()
-  | Expr.Eif (cond, if_e, else_e) -> todo ()
+  | Expr.Eif (if_e, then_e, else_e) ->
+      let ctx = forward_on_expr spec_map ctx if_e in
+      let proxy_var : string = new_proxy_var () in
+      let ctx = Sleekapi.add_assign_to_ctx ctx Sleekapi.Bool proxy_var in
+      let then_ctx = Sleekapi.add_cond_to_ctx ctx proxy_var true in
+      let else_ctx = Sleekapi.add_cond_to_ctx ctx proxy_var false in
+      let then_ctx = forward_on_expr spec_map then_ctx then_e in
+      let else_ctx = forward_on_expr spec_map else_ctx else_e in
+      Sleekapi.disj_of_ctx then_ctx else_ctx
+  | Expr.Eassign asgl ->
+      let set_field ctx (target, field, var) =
+        let target_name = string_of_pvsymbol target in
+        let field_name = string_of_rsymbol field in
+        let var_name = string_of_pvsymbol var in
+        let typ = typ_of_pvsymbol target in
+        Sleekapi.data_field_update ctx typ target_name field_name var_name
+      in
+      List.fold_left set_field ctx asgl
+  | Expr.Efor _ -> todo ()
+  | Expr.Ewhile _ -> todo ()
   | _ -> todo ()
 
 
@@ -198,7 +202,6 @@ let verify_function (specs : spec_map) = function
     (* not sure whether there is any difference between the ctype of the rssymbol and the cnode? *)
     let name = string_of_rsymbol rs in
     let spec, params = Mstr.find name specs in
-    Format.eprintf "initialize with spec=%s@." (Sleekapi.Printer.string_of_sf spec);
     (* initialize the context, somehow *)
     let ctx = Sleekapi.init_ctx spec params in
     let ctx = forward_on_expr specs ctx expr in
