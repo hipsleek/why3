@@ -72,6 +72,8 @@
     sp_partial = s1.sp_partial || s2.sp_partial;
   }
 
+  let append_sleek_spec s sleek_s = { s with sp_sleek = s.sp_sleek @ sleek_s }
+
   let break_id    = "'Break"
   let continue_id = "'Continue"
   let return_id   = "'Return"
@@ -354,6 +356,7 @@
 %nonassoc AS
 %nonassoc GHOST
 %nonassoc prec_attr
+%nonassoc prec_sleek
 %nonassoc COLON (* weaker than -> because of t: a -> b *)
 %right ARROW LRARROW BY SO
 %right OR BARBAR
@@ -1185,6 +1188,8 @@ single_expr_:
     { Eassert (snd $1, name_term $2 (fst $1) $4) }
 | attr single_expr %prec prec_attr
     { Eattr ($1, $2) }
+| sleek_only_spec single_expr %prec prec_sleek
+    { Esleek ($1, $2) }
 | single_expr cast
     { Ecast ($1, $2) }
 
@@ -1297,13 +1302,15 @@ for_dir:
 
 (* Specification *)
 
+sleek_only_spec:
+| SLEEK_SPEC+ { $1 }
+
 %public spec:
 | (* epsilon *) %prec prec_no_spec  { empty_spec }
 | single_spec spec                  { spec_union $1 $2 }
+| sleek_only_spec spec              { append_sleek_spec $2 $1 }
 
 single_spec:
-| SLEEK_SPEC
-    { { empty_spec with sp_sleek = [$1] } }
 | REQUIRES option(ident_nq) LEFTBRC term RIGHTBRC
     { { empty_spec with sp_pre = [name_term $2 "Requires" $4] } }
 | ENSURES option(ident_nq) LEFTBRC ensures RIGHTBRC

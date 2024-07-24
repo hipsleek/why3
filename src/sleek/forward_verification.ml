@@ -5,16 +5,6 @@ open Sleek_name_mangling
 
 let todo () = failwith "not implemented!"
 
-(*
-let add_spec file = assert false
-
-let add_data _ = assert false
-let add_lemma _ = assert false
-let add_predicate _ = assert false
-let to_sleek_context _ = assert false
-*)
-
-
 let union_all (ms : 'a Mstr.t list) : 'a Mstr.t =
   List.fold_left Mstr.set_union Mstr.empty ms
 
@@ -98,6 +88,7 @@ and gather_field { f_ident = { id_str; _ }; f_pty; _ } =
   let ty = Sleekapi.Int in
   ty, id_str
 
+let approximate_option_with_null _ = todo ()
 
 let rec gather_logic_decl_in_mlw_file = function
   | Decls decls

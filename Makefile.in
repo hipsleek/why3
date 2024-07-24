@@ -549,7 +549,7 @@ endif
 # Why3 plugins
 ##################
 
-# comment out the plugins
+# UNDEF
 ifeq (0, 1)
 
 PLUGGENERATED = \
@@ -689,7 +689,7 @@ install-bin::
 	$(INSTALL_DATA) $(wildcard $(LIBPLUGCMA) $(LIBPLUGCMXS)) $(LIBDIR)/why3/plugins
 
 endif
-# comment out the plugins
+# UNDEF
 
 ###############
 # Why3 commands

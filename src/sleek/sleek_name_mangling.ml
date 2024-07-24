@@ -37,13 +37,6 @@ let string_of_rsymbol (rs : Expr.rsymbol) : string =
 let string_of_lsymbol (ls : Term.lsymbol) : string =
   string_of_ident ls.Term.ls_name
 
-let new_proxy_var =
-  let counter = ref 0 in
-  fun () ->
-    let count = !counter in
-    counter := count + 1;
-    "o_sleek_proxy_" ^ (string_of_int count)
-
 let rec typ_of_ty Ty.{ ty_node } : Sleekapi.typ =
   typ_of_ty_node ty_node
 
@@ -63,3 +56,10 @@ let typ_of_vsymbol Term.{ vs_ty } : Sleekapi.typ =
 
 let typ_of_pvsymbol Ity.{ pv_vs; _ } : Sleekapi.typ =
   typ_of_vsymbol pv_vs
+
+let new_proxy_var =
+  let counter = ref 0 in
+  fun () ->
+    let count = !counter in
+    counter := count + 1;
+    "o_sleek_proxy_" ^ (string_of_int count)

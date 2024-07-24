@@ -1,3 +1,4 @@
+open Wstdlib
 open Ptree_sleek
 
 exception IncompatibleComponent
@@ -135,6 +136,8 @@ and drop_sleek_in_expr_desc = function
   | Eattr (attr, expr) ->
       let expr_no_sleek = drop_sleek_in_expr expr in
       Ptree.Eattr (attr, expr_no_sleek)
+  | Esleek (_, { expr_desc; _ }) ->
+      drop_sleek_in_expr_desc expr_desc
 
 and drop_sleek_in_fundef (id, ghost, kind, binders, pty, pattern, mask, spec, expr) =
   let spec_no_sleek = drop_sleek_in_spec spec in
@@ -188,3 +191,185 @@ let drop_sleek_in_mlw_file = function
         id, decls_no_sleek
       in
       Ptree.Modules (List.map drop_sleek mods)
+
+(* how to transform the while loop?
+   - traverse throught the AST structure of the file
+   - for each while loop, what do we do?
+   - first, we take the condition, and the body, and create a new function to accomodate
+     the logic
+   - second, we replace the entire while loop with a function call
+   - finally, we append the new function into the parse tree (somewhere), possibly at the
+   - front so that we can use it?
+ *)
+
+let unit_pty = PTtuple []
+
+let empty_spec = {
+  sp_sleek   = [];
+  sp_pre     = [];
+  sp_post    = [];
+  sp_xpost   = [];
+  sp_reads   = [];
+  sp_writes  = [];
+  sp_alias   = [];
+  sp_variant = [];
+  sp_checkrw = false;
+  sp_diverge = false;
+  sp_partial = false;
+}
+
+let anchor_attr = Ident.create_attribute "sleek:spec_anchor"
+
+let anchor_attrs = [anchor_attr]
+
+let ptree_anchor_attrs = [ATstr anchor_attr]
+
+let mk_ident ?attrs ?loc s = Ptree_helpers.ident ?attrs ?loc s
+
+let mk_qualid l = Ptree_helpers.qualid l
+
+let mk_pat ?loc desc = Ptree_helpers.pat ?loc desc
+
+let mk_expr ?(loc=Loc.dummy_position) desc = { expr_desc = desc; expr_loc = loc }
+
+let mk_generator (f : int -> string) : unit -> string =
+  let counter = ref 0 in fun () -> let i = !counter in counter := succ i; f i
+
+let new_proxy_fun = mk_generator (fun i -> "__proxy_fun_" ^ string_of_int i ^ "__")
+
+let new_anchor = mk_generator (fun i -> "__anchor_" ^ string_of_int i ^ "__")
+
+let todo () = failwith "unimplemented!"
+
+type preprocess_env = {
+  mutable specs : sleek_spec list Mstr.t
+}
+
+let rec preprocess_expr env { expr_desc; expr_loc } : expr =
+  let expr_desc = preprocess_expr_desc env expr_desc in
+  { expr_desc; expr_loc }
+
+and preprocess_expr_desc env = function
+  | Ewhile (cond_e, _, _, body_e) ->
+      let cond_e = preprocess_expr env cond_e in
+      let body_e = preprocess_expr env body_e in
+      (* TODO: add loc *)
+      let id = mk_ident (new_proxy_fun ()) in
+      let unit_e = mk_expr (Etuple []) in
+      let call_e = mk_expr (Eidapp (Qident id, [unit_e])) in
+      let body_e = mk_expr (Esequence (body_e, call_e)) in
+      let ifte_e = mk_expr (Eif (cond_e, body_e, unit_e)) in
+      let binders = [Loc.dummy_position, None, false, Some unit_pty] in
+      let pat = mk_pat Pwild in
+      let def : fundef = id, false, Expr.RKnone, binders, None, pat, Ity.MaskVisible, empty_spec, ifte_e in
+      Erec ([def], call_e)
+  | Esleek (specs, e) ->
+      let id_name = new_anchor () in
+      let id = mk_ident ~attrs:ptree_anchor_attrs id_name in
+      let unit_e = mk_expr (Etuple []) in
+      env.specs <- Mstr.add id_name specs env.specs;
+      Elet (id, false, Expr.RKnone, unit_e, preprocess_expr env e)
+  | Eidapp (qid, el) ->
+      let el = List.map (preprocess_expr env) el in
+      Eidapp (qid, el)
+  | Eapply (e0, e1) ->
+      let e0 = preprocess_expr env e0 in
+      let e1 = preprocess_expr env e1 in
+      Eapply (e0, e1)
+  | Einfix (e0, id, e1) ->
+      let e0 = preprocess_expr env e0 in
+      let e1 = preprocess_expr env e1 in
+      Einfix (e0, id, e1)
+  | Einnfix (e0, id, e1) ->
+      let e0 = preprocess_expr env e0 in
+      let e1 = preprocess_expr env e1 in
+      Einnfix (e0, id, e1)
+  | Elet (id, ghost, kind, e0, e1) ->
+      let e0 = preprocess_expr env e0 in
+      let e1 = preprocess_expr env e1 in
+      Elet (id, ghost, kind, e0, e1)
+  | Erec (defs, e) ->
+      let defs = List.map (preprocess_fundef env) defs in
+      let e = preprocess_expr env e in
+      Erec (defs, e)
+  | Efun (binders, pty_opt, pat, mask, spec, e) ->
+      Efun (binders, pty_opt, pat, mask, spec, preprocess_expr env e)
+  | Etuple el ->
+      Etuple (List.map (preprocess_expr env) el)
+  | Erecord fields ->
+      Erecord (List.map (preprocess_field env) fields)
+  | Eupdate (e, fields) ->
+      let e = preprocess_expr env e in
+      let fields = List.map (preprocess_field env) fields in
+      Eupdate (e, fields)
+  | Eassign asgs ->
+      let preprocess_asg (e0, qid_opt, e1) =
+        let e0 = preprocess_expr env e0 in
+        let e1 = preprocess_expr env e1 in
+        e0, qid_opt, e1
+      in
+      Eassign (List.map preprocess_asg asgs)
+  | Esequence (e0, e1) ->
+      let e0 = preprocess_expr env e0 in
+      let e1 = preprocess_expr env e1 in
+      Esequence (e0, e1)
+  | Eif (e0, e1, e2) ->
+      let e0 = preprocess_expr env e0 in
+      let e1 = preprocess_expr env e1 in
+      let e2 = preprocess_expr env e2 in
+      Eif (e0, e1, e2)
+  | Eand (e0, e1) ->
+      let e0 = preprocess_expr env e0 in
+      let e1 = preprocess_expr env e1 in
+      Eand (e0, e1)
+  | Eor (e0, e1) ->
+      let e0 = preprocess_expr env e0 in
+      let e1 = preprocess_expr env e1 in
+      Eor (e0, e1)
+  | Enot e ->
+      Enot (preprocess_expr env e)
+  | Ematch (e, reg_branches, exn_branches) ->
+      assert false
+  | Eraise (qid, e_opt) ->
+      Eraise (qid, Option.map (preprocess_expr env) e_opt)
+  | Eexn (id, ty, mask, e) ->
+      Eexn (id, ty, mask, preprocess_expr env e)
+  | Eoptexn (id, mask, e) ->
+      Eoptexn (id, mask, preprocess_expr env e)
+  | Escope (qid, e) ->
+      Escope (qid, preprocess_expr env e)
+  | Elabel (id, e) ->
+      Elabel (id, preprocess_expr env e)
+  | Ecast (e, pty) ->
+      Ecast (preprocess_expr env e, pty)
+  | Eattr (attr, e) ->
+      Eattr (attr, preprocess_expr env e)
+  | Efor _ ->
+      todo ()
+  | Eref | Etrue | Efalse | Econst _ | Eident _ | Easref _
+  | Eany _ | Eabsurd | Epure _ | Eassert _ | Eghost _
+  | Eidpur _ as expr_desc ->
+      expr_desc
+
+and preprocess_field env (qid, e) = qid, preprocess_expr env e
+
+and preprocess_fundef env (id, ghost, kind, binders, pty_opt, pat, mask, spec, e) =
+  id, ghost, kind, binders, pty_opt, pat, mask, spec, preprocess_expr env e
+
+let preprocess_decl env = function
+  | Dlet (id, ghost, kind, expr) ->
+      Dlet (id, ghost, kind, preprocess_expr env expr)
+  | Drec defs ->
+      Drec (List.map (preprocess_fundef env) defs)
+  | _ as decl ->
+      decl
+
+let preprocess_decl_list env (decls : decl list) : decl list =
+  List.map (preprocess_decl env) decls
+
+let preprocess_mlw_file env = function
+  | Decls decls ->
+      Decls (preprocess_decl_list env decls)
+  | Modules mods ->
+      let preprocess_mod (id, decls) = id, preprocess_decl_list env decls in
+      Modules (List.map preprocess_mod mods)

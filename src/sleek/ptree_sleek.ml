@@ -326,6 +326,7 @@ and expr_desc =
   (** forces an expression to be ghost, e.g., [ghost e] *)
   | Eattr of attr * expr
   (** attach an attribute to an expression *)
+  | Esleek of sleek_spec list * expr
 
 (** A regular match branch *)
 and reg_branch = pattern * expr
