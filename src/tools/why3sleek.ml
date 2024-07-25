@@ -7,19 +7,29 @@ let usage_msg =
   "<file>\n\
    Parse the given file, then display the AST in Sexp format or prove it."
 
+let opt_preprocess = ref false
+let opt_pretty_print = ref false
 let opt_prove = ref false
 let opt_file = ref None
 let option_list =
   let open Getopt in
   [ Key ('p', "prove"), Hnd0 (fun () -> opt_prove := true),
-    "proving instead of prining"
+    "proving instead of prining";
+    KLong "preprocess", Hnd0 (fun () -> opt_preprocess := true),
+    "preprocess the parse tree";
+    KLong "pretty-print", Hnd0 (fun () -> opt_pretty_print := true),
+    "pretty print the parse tree instead of printing in sexp"
   ]
 
 let add_opt_file file = opt_file := Some file
 
 let _, env =
-  eprintf "why3pp_sleek.ml: initialize args@.";
+  eprintf "why3sleek.ml: initialize args@.";
   Whyconf.Args.initialize option_list add_opt_file usage_msg
+
+let () =
+  eprintf "why3sleek.ml: setting up@.";
+  Sleekapi.init ()
 
 let parse_mlw_file filename =
   let c = if filename = "-" then stdin else open_in filename in
@@ -33,6 +43,8 @@ let handle_no_file () =
   Whyconf.Args.exit_with_usage usage_msg
 
 let prove_file file mlw_file =
+  let mlw_file, specs = Ptree_sleek_helpers.preprocess_mlw_file mlw_file in
+  (* TODO: union this spec with the *)
   let mlw_file_no_sleek = Ptree_sleek_helpers.drop_sleek_in_mlw_file mlw_file in
   let pmodules = Typing.type_mlw_file env [] file mlw_file_no_sleek in
   let pmodules = Wstdlib.Mstr.values pmodules in
@@ -52,8 +64,21 @@ let prove_file file mlw_file =
     | _ -> raise (Invalid_argument "only support file with exactly one module!")
 
 let print_file mlw_file =
-  let sexp = Why3.Ptree_sleek.sexp_of_mlw_file mlw_file in
-  Mysexplib.output std_formatter sexp
+  let mlw_file =
+    if !opt_preprocess then
+      let preprocessed_mlw_file, _ = Ptree_sleek_helpers.preprocess_mlw_file mlw_file in
+      preprocessed_mlw_file
+    else
+      mlw_file
+  in
+  if !opt_pretty_print then begin
+    let mlw_file_no_sleek = Ptree_sleek_helpers.drop_sleek_in_mlw_file mlw_file in
+    printf "%a@." (Mlw_printer.pp_mlw_file ~attr:false) mlw_file_no_sleek
+  end
+  else begin
+    let sexp = Why3.Ptree_sleek.sexp_of_mlw_file mlw_file in
+    Mysexplib.output std_formatter sexp
+  end
 
 let handle_file file =
   let mlw_file = parse_mlw_file file in
@@ -61,8 +86,6 @@ let handle_file file =
     prove_file file mlw_file
   else
     print_file mlw_file
-
-let () = Sleekapi.init ()
 
 let () =
   eprintf "why3sleek: handle input file@.";

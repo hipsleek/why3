@@ -239,7 +239,7 @@ let new_proxy_fun = mk_generator (fun i -> "__proxy_fun_" ^ string_of_int i ^ "_
 
 let new_anchor = mk_generator (fun i -> "__anchor_" ^ string_of_int i ^ "__")
 
-let todo () = failwith "unimplemented!"
+let todo () = failwith "todo!"
 
 type preprocess_env = {
   mutable specs : sleek_spec list Mstr.t
@@ -329,7 +329,11 @@ and preprocess_expr_desc env = function
   | Enot e ->
       Enot (preprocess_expr env e)
   | Ematch (e, reg_branches, exn_branches) ->
-      assert false
+      let preprocess_reg_branch (pat, e) = pat, preprocess_expr env e in
+      let preprocess_exn_branch (qid, pat_opt, e) = qid, pat_opt, preprocess_expr env e in
+      let reg_branches = List.map preprocess_reg_branch reg_branches in
+      let exn_branches = List.map preprocess_exn_branch exn_branches in
+      Ematch (e, reg_branches, exn_branches)
   | Eraise (qid, e_opt) ->
       Eraise (qid, Option.map (preprocess_expr env) e_opt)
   | Eexn (id, ty, mask, e) ->
@@ -346,8 +350,17 @@ and preprocess_expr_desc env = function
       Eattr (attr, preprocess_expr env e)
   | Efor _ ->
       todo ()
-  | Eref | Etrue | Efalse | Econst _ | Eident _ | Easref _
-  | Eany _ | Eabsurd | Epure _ | Eassert _ | Eghost _
+  | Eref
+  | Etrue
+  | Efalse
+  | Econst _
+  | Eident _
+  | Easref _
+  | Eany _
+  | Eabsurd
+  | Epure _
+  | Eassert _
+  | Eghost _
   | Eidpur _ as expr_desc ->
       expr_desc
 
@@ -373,3 +386,8 @@ let preprocess_mlw_file env = function
   | Modules mods ->
       let preprocess_mod (id, decls) = id, preprocess_decl_list env decls in
       Modules (List.map preprocess_mod mods)
+
+let preprocess_mlw_file mlw_file =
+  let env = { specs = Mstr.empty } in
+  let mlw_file = preprocess_mlw_file env mlw_file in
+  mlw_file, env.specs
